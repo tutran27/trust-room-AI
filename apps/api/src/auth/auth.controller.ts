@@ -1,4 +1,5 @@
 import {
+  Inject,
   BadRequestException,
   Body,
   Controller,
@@ -16,7 +17,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post('nonce')
   async getNonce(@Body() dto: NonceRequestDto) {

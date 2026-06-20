@@ -1,11 +1,14 @@
-import { Controller, Get, Patch, Param, Body, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, Query, Req, UseGuards, Inject } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsService } from './notifications.service';
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(
+    @Inject(NotificationsService)
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   @Get()
   async list(@Req() req: any, @Query('unreadOnly') unreadOnly?: string) {

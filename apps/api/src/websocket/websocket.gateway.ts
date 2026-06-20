@@ -8,7 +8,7 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { analyzeTranscript } from '@trustroom/ai';
 import { type DealStatus } from '@trustroom/types';
@@ -34,7 +34,8 @@ export class WebsocketGateway
   private readonly logger = new Logger(WebsocketGateway.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationsService)
     private readonly notifications: NotificationsService,
   ) {}
 

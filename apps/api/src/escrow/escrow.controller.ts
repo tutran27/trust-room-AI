@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Body,
+  Inject,
   Param,
   UseGuards,
   Request,
@@ -14,7 +15,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 @Controller('escrow')
 @UseGuards(JwtAuthGuard)
 export class EscrowController {
-  constructor(private readonly escrowService: EscrowService) {}
+  constructor(@Inject(EscrowService) private readonly escrowService: EscrowService) {}
 
   @Post()
   async create(@Body() dto: CreateEscrowDto) {

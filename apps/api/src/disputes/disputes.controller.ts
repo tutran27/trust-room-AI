@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../common/authenticated-request';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
@@ -9,7 +9,7 @@ import { DisputesService } from './disputes.service';
 @Controller('disputes')
 @UseGuards(JwtAuthGuard)
 export class DisputesController {
-  constructor(private readonly disputesService: DisputesService) {}
+  constructor(@Inject(DisputesService) private readonly disputesService: DisputesService) {}
 
   @Post()
   create(@Req() req: AuthenticatedRequest, @Body() dto: CreateDisputeDto) {

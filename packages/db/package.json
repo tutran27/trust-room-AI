@@ -11,19 +11,20 @@
     }
   },
   "scripts": {
-    "generate": "prisma generate",
+    "generate": "node scripts/prisma-root-env.cjs generate",
     "build": "prisma generate && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "db:push": "prisma db push",
+    "db:push": "node scripts/prisma-root-env.cjs db push --skip-generate",
     "seed": "node prisma/seed.js",
-    "migrate:dev": "prisma migrate dev",
-    "studio": "prisma studio",
+    "migrate:dev": "node scripts/prisma-root-env.cjs migrate dev",
+    "studio": "node scripts/prisma-root-env.cjs studio",
     "clean": "rimraf dist .turbo generated *.tsbuildinfo"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",
     "@prisma/client": "^5.22.0",
     "bs58": "^6.0.0",
+    "dotenv": "^16.4.5",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {

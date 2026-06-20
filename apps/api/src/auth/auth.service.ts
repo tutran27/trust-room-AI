@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AppException } from '../common/app-exception';
@@ -15,9 +15,9 @@ import {
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly config: ConfigService,
-    private readonly prisma: PrismaService,
-    private readonly jwt: JwtService,
+    @Inject(ConfigService) private readonly config: ConfigService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JwtService) private readonly jwt: JwtService,
   ) {}
 
   async getNonce(walletAddress: string): Promise<{

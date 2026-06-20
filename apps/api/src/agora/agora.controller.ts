@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Req, UseGuards, Inject } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AgoraService } from './agora.service';
 import { CreateAgoraDto } from './dto/create-agora.dto';
@@ -7,7 +7,7 @@ import { VoteAgoraDto } from './dto/vote-agora.dto';
 @Controller('agora')
 @UseGuards(JwtAuthGuard)
 export class AgoraController {
-  constructor(private readonly agoraService: AgoraService) {}
+  constructor(@Inject(AgoraService) private readonly agoraService: AgoraService) {}
 
   @Post()
   async create(@Req() req: any, @Body() dto: CreateAgoraDto) {

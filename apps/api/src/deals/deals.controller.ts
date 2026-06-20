@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Inject,
   Param,
   Patch,
   Post,
@@ -22,7 +23,7 @@ import { DealsService } from './deals.service';
 @Controller('deals')
 @UseGuards(JwtAuthGuard)
 export class DealsController {
-  constructor(private readonly dealsService: DealsService) {}
+  constructor(@Inject(DealsService) private readonly dealsService: DealsService) {}
 
   @Post()
   create(@Body() dto: CreateDealDto, @Req() req: AuthenticatedRequest) {

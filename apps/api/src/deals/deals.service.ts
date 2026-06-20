@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma, ParticipantRole } from '@trustroom/db';
 import { DealEvent, DealStatus, canTransition } from '@trustroom/types';
 import { AppException } from '../common/app-exception';
@@ -22,9 +22,11 @@ import { ReputationService } from '../reputation/reputation.service';
 @Injectable()
 export class DealsService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly ws: WebsocketGateway,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(WebsocketGateway) private readonly ws: WebsocketGateway,
+    @Inject(NotificationsService)
     private readonly notifications: NotificationsService,
+    @Inject(ReputationService)
     private readonly reputation: ReputationService,
   ) {}
 

@@ -1,11 +1,14 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Inject, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ReputationService } from './reputation.service';
 
 @Controller('reputation')
 @UseGuards(JwtAuthGuard)
 export class ReputationController {
-  constructor(private readonly reputationService: ReputationService) {}
+  constructor(
+    @Inject(ReputationService)
+    private readonly reputationService: ReputationService,
+  ) {}
 
   @Get('leaderboard')
   async leaderboard(@Query('limit') limit?: string) {

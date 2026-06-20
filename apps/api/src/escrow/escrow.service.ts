@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -25,9 +26,10 @@ export class EscrowService {
   private readonly simulated: boolean;
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationsService)
     private readonly notifications: NotificationsService,
-    private readonly ws: WebsocketGateway,
+    @Inject(WebsocketGateway) private readonly ws: WebsocketGateway,
   ) {
     // Simulated unless a real program id is configured AND on-chain wiring exists.
     this.simulated = !process.env.ESCROW_PROGRAM_ID;

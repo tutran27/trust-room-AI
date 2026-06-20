@@ -1,10 +1,10 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Inject, Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { AgoraStatus } from '@trustroom/db';
 
 @Injectable()
 export class AgoraService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async create(wallet: string, title: string, description: string, category: string, tokenMint?: string) {
     return this.prisma.agora.create({

@@ -1,4 +1,10 @@
-const bs58 = require('bs58');
+const path = require('path');
+require('dotenv').config({
+  path: path.resolve(__dirname, '../../../.env'),
+});
+
+const bs58Module = require('bs58');
+const bs58 = bs58Module.default ?? bs58Module;
 const nacl = require('tweetnacl');
 const { PrismaClient, DealStatus, EscrowStatus, DisputeStatus } = require('../generated/client');
 
