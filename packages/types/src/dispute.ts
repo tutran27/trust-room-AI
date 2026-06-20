@@ -48,3 +48,45 @@ export const disputeReportSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 export type DisputeReport = z.infer<typeof disputeReportSchema>;
+
+// ──────────────────────────────────────────────
+// DB-compatible enums + request payloads (API surface)
+//
+// These match the Prisma `DisputeStatus` / `DisputeResolution` enums so the API
+// can validate against DB-compatible values. Added alongside the existing
+// lowercase schemas above (which other code may still consume) — not a replacement.
+// ──────────────────────────────────────────────
+
+/** Dispute status — matches Prisma `DisputeStatus`. */
+export const disputeStatusDbSchema = z.enum([
+  'Open',
+  'UnderReview',
+  'Resolved',
+  'Escalated',
+]);
+export type DisputeStatusDb = z.infer<typeof disputeStatusDbSchema>;
+
+/** Dispute resolution outcome — matches Prisma `DisputeResolution`. */
+export const disputeResolutionSchema = z.enum([
+  'ReleaseToSeller',
+  'RefundToBuyer',
+  'SplitPayment',
+]);
+export type DisputeResolution = z.infer<typeof disputeResolutionSchema>;
+
+/** Request to open a dispute on a deal. */
+export const createDisputeRequestSchema = z.object({
+  dealId: z.string(),
+  raisedBy: z.string(),
+  reason: disputeReasonSchema,
+  description: z.string().min(1),
+});
+export type CreateDisputeRequest = z.infer<typeof createDisputeRequestSchema>;
+
+/** Request to resolve a dispute with a DB-compatible resolution outcome. */
+export const resolveDisputeRequestSchema = z.object({
+  resolution: disputeResolutionSchema,
+  resolvedBy: z.string(),
+  resolutionNote: z.string().optional(),
+});
+export type ResolveDisputeRequest = z.infer<typeof resolveDisputeRequestSchema>;

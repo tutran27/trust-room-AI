@@ -1,4 +1,4 @@
-import { LLMConfig } from './llm';
+import { LLMConfig } from './llm.js';
 
 const DEFAULT_DIMENSION = 64;
 

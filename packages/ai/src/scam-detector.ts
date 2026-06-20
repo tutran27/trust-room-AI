@@ -1,4 +1,5 @@
-import { LLMClient } from './llm';
+import { LLMClient } from './llm.js';
+import { analyzeTranscript } from './scam-guard/detect.js';
 
 export interface ScamDetectionResult {
   isScam: boolean;
@@ -9,6 +10,8 @@ export interface ScamDetectionResult {
     description: string;
   }>;
   analysis: string;
+  /** Distinguishes a real LLM detection from the deterministic heuristic fallback. */
+  source: 'llm' | 'heuristic';
 }
 
 const SCAM_DETECTION_PROMPT = `You are a scam detection specialist for a decentralized escrow platform.
@@ -30,17 +33,60 @@ Red flags to look for:
 - Too-good-to-be-true terms
 `;
 
+/**
+ * Deterministic scam detection driven by the scam-guard rule engine. Maps fired
+ * rules to flags and derives an isScam/confidence verdict from the aggregate
+ * level. No network, never throws.
+ */
+export function detectScamHeuristic(dealDescription: string): ScamDetectionResult {
+  const { hits, level } = analyzeTranscript(dealDescription ?? '', 'Negotiating');
+
+  const flags: ScamDetectionResult['flags'] = hits.map((hit) => ({
+    type: hit.rule.intent,
+    severity: hit.rule.riskLevel,
+    description: hit.rule.message,
+  }));
+
+  const isScam = level === 'high' || level === 'critical';
+  // Confidence scales with severity; deterministic and explainable.
+  const confidence =
+    level === 'critical' ? 0.9 : level === 'high' ? 0.7 : level === 'medium' ? 0.4 : 0.1;
+
+  const analysis = hits.length
+    ? `Rule-based scam guard fired ${hits.length} rule(s): ${hits
+        .map((h) => h.rule.ruleId)
+        .join(', ')}. Highest severity: ${level}.`
+    : 'No deterministic scam-rule indicators detected in the provided text.';
+
+  return {
+    isScam,
+    confidence,
+    flags,
+    analysis,
+    source: 'heuristic',
+  };
+}
+
 export async function detectScam(
   client: LLMClient,
   dealDescription: string,
 ): Promise<ScamDetectionResult> {
-  const result = await client.chatWithJSON<ScamDetectionResult>(
-    [{ role: 'user', content: `${SCAM_DETECTION_PROMPT}\n\nDeal description:\n${dealDescription}` }],
-    { temperature: 0.1 },
-  );
+  if (!client.isConfigured()) {
+    return detectScamHeuristic(dealDescription);
+  }
 
-  return {
-    ...result,
-    confidence: Math.max(0, Math.min(1, result.confidence)),
-  };
+  try {
+    const result = await client.chatWithJSON<ScamDetectionResult>(
+      [{ role: 'user', content: `${SCAM_DETECTION_PROMPT}\n\nDeal description:\n${dealDescription}` }],
+      { temperature: 0.1 },
+    );
+
+    return {
+      ...result,
+      confidence: Math.max(0, Math.min(1, result.confidence)),
+      source: 'llm',
+    };
+  } catch {
+    return detectScamHeuristic(dealDescription);
+  }
 }

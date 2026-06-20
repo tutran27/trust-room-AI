@@ -1,4 +1,9 @@
-import { scoreToLevel, type DealStatus, type RiskLevel } from '@trustroom/types';
+import {
+  scoreToLevel,
+  type DealStatus,
+  type RiskLevel,
+  type ScamIntent,
+} from '@trustroom/types';
 import { SCAM_RULES, type ScamRule } from './rules.js';
 
 /** Normalize transcript text for keyword matching (lowercase, collapse whitespace). */
@@ -68,4 +73,27 @@ export function aggregateRisk(hits: RuleHit[]): RiskAssessment {
     scoreToLevel(score),
   );
   return { score, level, hits };
+}
+
+export interface TranscriptAnalysis {
+  hits: RuleHit[];
+  score: number;
+  level: RiskLevel;
+  intents: ScamIntent[];
+}
+
+/**
+ * Convenience one-shot analyzer for API/UI consumption. Runs the deterministic
+ * rule layer over a transcript chunk and aggregates the result into a flat
+ * `{ hits, score, level, intents }` shape. `intents` is the de-duplicated list of
+ * scam intents that fired, in rule-catalog order.
+ */
+export function analyzeTranscript(
+  text: string,
+  dealStatus: DealStatus,
+): TranscriptAnalysis {
+  const hits = runRules(text, dealStatus);
+  const { score, level } = aggregateRisk(hits);
+  const intents = Array.from(new Set(hits.map((h) => h.rule.intent)));
+  return { hits, score, level, intents };
 }
