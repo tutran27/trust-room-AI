@@ -1,0 +1,37 @@
+# vibecode harness
+.vibecode-backup*/
+
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build outputs
+dist/
+build/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# rust / anchor (programs/escrow)
+target/
+.anchor/
+test-ledger/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# logs & coverage
+coverage/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editor / os
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

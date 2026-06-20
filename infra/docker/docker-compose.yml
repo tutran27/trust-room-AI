@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: trustroom-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: trustroom
+    ports:
+      - "5432:5432"
+    volumes:
+      - trustroom-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: trustroom-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - trustroom-redis:/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: trustroom-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333" # REST
+      - "6334:6334" # gRPC
+    volumes:
+      - trustroom-qdrant:/qdrant/storage
+
+volumes:
+  trustroom-pg:
+  trustroom-redis:
+  trustroom-qdrant:

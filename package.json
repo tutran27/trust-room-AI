@@ -1,0 +1,26 @@
+{
+  "name": "trustroom-ai",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AI-supervised escrow room for high-risk P2P deals (Agora + Solana + Evidence Vault).",
+  "packageManager": "pnpm@11.8.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rimraf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "prettier": "^3.3.0",
+    "rimraf": "^6.0.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.6.0"
+  }
+}
