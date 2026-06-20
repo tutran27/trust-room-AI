@@ -45,6 +45,49 @@ export function getTargetStatusForAction(
   ) {
     return DealStatus.WalletVerified;
   }
+  if (action === 'create-escrow' && currentStatus === DealStatus.WalletVerified) {
+    return DealStatus.EscrowCreated;
+  }
+  if (action === 'deposit' && currentStatus === DealStatus.EscrowCreated) {
+    return DealStatus.Deposited;
+  }
+  if (action === 'start-negotiation' && currentStatus === DealStatus.Deposited) {
+    return DealStatus.Negotiating;
+  }
+  if (action === 'confirm-terms' && currentStatus === DealStatus.Negotiating) {
+    return DealStatus.TermsConfirmed;
+  }
+  if (action === 'submit-delivery' && currentStatus === DealStatus.TermsConfirmed) {
+    return DealStatus.DeliverySubmitted;
+  }
+  if (action === 'mark-ready' && currentStatus === DealStatus.DeliverySubmitted) {
+    return DealStatus.ReadyToRelease;
+  }
+  if (action === 'release' && currentStatus === DealStatus.ReadyToRelease) {
+    return DealStatus.Released;
+  }
+  if (action === 'raise-dispute') {
+    switch (currentStatus) {
+      case DealStatus.Deposited:
+      case DealStatus.Negotiating:
+      case DealStatus.TermsConfirmed:
+      case DealStatus.DeliverySubmitted:
+      case DealStatus.ReadyToRelease:
+        return DealStatus.Disputed;
+      default:
+        return null;
+    }
+  }
+  if (action === 'refund') {
+    switch (currentStatus) {
+      case DealStatus.Deposited:
+      case DealStatus.Negotiating:
+      case DealStatus.TermsConfirmed:
+        return DealStatus.Refunded;
+      default:
+        return null;
+    }
+  }
   if (action === 'cancel') {
     switch (currentStatus) {
       case DealStatus.Draft:
@@ -61,14 +104,11 @@ export function getTargetStatusForAction(
 }
 
 export function getEventForAction(action: DealAction): string {
-  switch (action) {
-    case 'publish':
-      return DealEvent.DealPublished;
-    case 'open-invitation':
-      return DealEvent.DealInvitationOpened;
-    case 'verify-wallets':
-      return DealEvent.WalletVerified;
-    case 'cancel':
-      return DealEvent.DealCancelled;
-  }
+  const map: Partial<Record<DealAction, string>> = {
+    publish: DealEvent.DealPublished,
+    'open-invitation': DealEvent.DealInvitationOpened,
+    'verify-wallets': DealEvent.WalletVerified,
+    cancel: DealEvent.DealCancelled,
+  };
+  return map[action] ?? `deal.${action}`;
 }

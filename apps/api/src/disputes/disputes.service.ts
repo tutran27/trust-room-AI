@@ -5,10 +5,44 @@ import { PrismaService } from '../database/prisma.service';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { CreateEvidenceDto } from './dto/create-evidence.dto';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
+import { WebsocketGateway } from '../websocket/websocket.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class DisputesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ws: WebsocketGateway,
+    private readonly notifications: NotificationsService,
+  ) {}
+
+  /** Best-effort: notify every participant of a deal + emit a realtime event. */
+  private async notifyDeal(
+    dealId: string,
+    title: string,
+    message: string,
+    type: 'DisputeOpened' | 'DisputeResolved',
+  ) {
+    try {
+      const participants = await this.prisma.dealParticipant.findMany({
+        where: { dealId },
+        select: { walletAddress: true },
+      });
+      for (const p of participants) {
+        const n = await this.notifications.create(p.walletAddress, title, message, type, dealId);
+        this.ws.emitNotification(p.walletAddress, {
+          id: n.id,
+          type,
+          title,
+          message,
+          dealId,
+          createdAt: n.createdAt,
+        });
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
 
   async createDispute(actorWallet: string, dto: CreateDisputeDto) {
     const deal = await this.prisma.deal.findUnique({
@@ -40,7 +74,7 @@ export class DisputesService {
       );
     }
 
-    return this.prisma.dispute.create({
+    const dispute = await this.prisma.dispute.create({
       data: {
         dealId: dto.dealId,
         raisedBy: actorWallet,
@@ -49,6 +83,20 @@ export class DisputesService {
       },
       include: { evidence: true },
     });
+
+    try {
+      this.ws.emitDisputeUpdate(dispute.id, { dealId: dto.dealId, status: dispute.status, kind: 'opened' });
+    } catch {
+      /* best-effort */
+    }
+    void this.notifyDeal(
+      dto.dealId,
+      'Dispute opened',
+      `A dispute was opened: ${dto.reason}.`,
+      'DisputeOpened',
+    );
+
+    return dispute;
   }
 
   async addEvidence(actorWallet: string, disputeId: string, dto: CreateEvidenceDto) {
@@ -136,7 +184,7 @@ export class DisputesService {
       SplitPayment: DisputeResolution.SplitPayment,
     };
 
-    return this.prisma.dispute.update({
+    const resolved = await this.prisma.dispute.update({
       where: { id: disputeId },
       data: {
         status: DisputeStatus.Resolved,
@@ -145,5 +193,24 @@ export class DisputesService {
       },
       include: { evidence: true, deal: true },
     });
+
+    try {
+      this.ws.emitDisputeUpdate(resolved.id, {
+        dealId: resolved.dealId,
+        status: resolved.status,
+        resolution: resolved.resolution,
+        kind: 'resolved',
+      });
+    } catch {
+      /* best-effort */
+    }
+    void this.notifyDeal(
+      resolved.dealId,
+      'Dispute resolved',
+      `Dispute resolved: ${dto.resolution}.`,
+      'DisputeResolved',
+    );
+
+    return resolved;
   }
 }

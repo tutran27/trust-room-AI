@@ -10,9 +10,16 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:web": "pnpm --filter @trustroom/web dev",
+    "dev:api": "pnpm --filter @trustroom/api dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "db:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "db:push": "pnpm --filter @trustroom/db db:push",
+    "db:seed": "pnpm --filter @trustroom/db seed",
+    "demo:setup": "pnpm db:up && pnpm --filter @trustroom/db generate && pnpm db:push && pnpm db:seed",
     "clean": "turbo run clean && rimraf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },

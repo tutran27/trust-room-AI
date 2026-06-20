@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AppException } from '../common/app-exception';
-import { PrismaService } from '@trustroom/db';
+import { PrismaService } from '../database/prisma.service';
 import { VerifyRequestDto } from './dto/verify.dto';
 import {
   buildAuthMessage,

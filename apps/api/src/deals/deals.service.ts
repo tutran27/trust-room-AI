@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, ParticipantRole } from '@trustroom/db';
 import { DealEvent, DealStatus, canTransition } from '@trustroom/types';
 import { AppException } from '../common/app-exception';
-import { PrismaService } from '@trustroom/db';
+import { PrismaService } from '../database/prisma.service';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { InviteSellerDto } from './dto/invite-seller.dto';
 import { ListDealsDto } from './dto/list-deals.dto';
@@ -15,10 +15,18 @@ import {
   getEventForAction,
   getTargetStatusForAction,
 } from './deals.utils';
+import { WebsocketGateway } from '../websocket/websocket.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { ReputationService } from '../reputation/reputation.service';
 
 @Injectable()
 export class DealsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ws: WebsocketGateway,
+    private readonly notifications: NotificationsService,
+    private readonly reputation: ReputationService,
+  ) {}
 
   async create(dto: CreateDealDto, actorWallet: string) {
     const participants: Array<{ walletAddress: string; role: ParticipantRole }> = [
@@ -321,7 +329,69 @@ export class DealsService {
       });
     });
 
-    return this.serializeDeal(updated);
+    const serialized = this.serializeDeal(updated);
+    void this.afterTransition(updated, current.status, targetStatus);
+    return serialized;
+  }
+
+  /**
+   * Best-effort side-effects after a successful deal transition: broadcast a
+   * realtime `deal_update`, notify participants, and update reputation when the
+   * deal reaches a terminal state. Failures here never affect the API response.
+   */
+  private async afterTransition(
+    deal: {
+      id: string;
+      status: DealStatus;
+      participants: Array<{ walletAddress: string; role: ParticipantRole }>;
+    },
+    from: DealStatus,
+    to: DealStatus,
+  ) {
+    try {
+      this.ws.emitDealUpdate(deal.id, { kind: 'status', from, to, status: to });
+    } catch {
+      /* best-effort */
+    }
+
+    for (const p of deal.participants) {
+      try {
+        const n = await this.notifications.create(
+          p.walletAddress,
+          'Deal updated',
+          `Deal status changed: ${from} → ${to}.`,
+          'DealStatusChanged',
+          deal.id,
+        );
+        this.ws.emitNotification(p.walletAddress, {
+          id: n.id,
+          type: 'DealStatusChanged',
+          title: 'Deal updated',
+          message: `Deal status changed: ${from} → ${to}.`,
+          dealId: deal.id,
+          createdAt: n.createdAt,
+        });
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    // Reputation: completed on Released, disputed on Disputed.
+    try {
+      if (to === DealStatus.Released) {
+        for (const p of deal.participants) {
+          await this.reputation.incrementCompletedDeals(p.walletAddress, true);
+          await this.reputation.recalculateScore(p.walletAddress);
+        }
+      } else if (to === DealStatus.Disputed) {
+        for (const p of deal.participants) {
+          await this.reputation.incrementDisputedDeals(p.walletAddress);
+          await this.reputation.recalculateScore(p.walletAddress);
+        }
+      }
+    } catch {
+      /* best-effort */
+    }
   }
 
   async cancel(

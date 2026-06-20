@@ -3,19 +3,39 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaService } from '@trustroom/db';
-import { EscrowClient, PublicKey } from '@trustroom/solana';
+import { randomBytes } from 'crypto';
+import { PrismaService } from '../database/prisma.service';
+import { NotificationType } from '@trustroom/db';
 import { CreateEscrowDto } from './dto/create-escrow.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { WebsocketGateway } from '../websocket/websocket.gateway';
 
+/**
+ * Escrow service.
+ *
+ * Runs in SIMULATED (devnet) mode by default: the on-chain Anchor program is not
+ * deployed in this environment, so lifecycle actions persist state + a synthetic
+ * transaction signature instead of submitting a real Solana transaction. When a
+ * real program + signer pipeline is wired later (ESCROW_PROGRAM_ID set and a
+ * deployed program), the `simulated` flag flips to false without changing the API
+ * contract. This keeps the demo fully functional with zero blockchain setup.
+ */
 @Injectable()
 export class EscrowService {
-  private escrowClient: EscrowClient;
+  private readonly simulated: boolean;
 
-  constructor(private readonly prisma: PrismaService) {
-    this.escrowClient = new EscrowClient(
-      'devnet',
-      process.env.SOLANA_RPC_URL,
-    );
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+    private readonly ws: WebsocketGateway,
+  ) {
+    // Simulated unless a real program id is configured AND on-chain wiring exists.
+    this.simulated = !process.env.ESCROW_PROGRAM_ID;
+  }
+
+  /** Generate a plausible-looking, clearly-synthetic Solana tx signature. */
+  private syntheticSignature(): string {
+    return `SIM${randomBytes(32).toString('hex')}`;
   }
 
   async createEscrow(dto: CreateEscrowDto) {
@@ -25,7 +45,9 @@ export class EscrowService {
     const existing = await this.prisma.escrow.findFirst({
       where: { dealId: dto.dealId },
     });
-    if (existing) throw new BadRequestException('Escrow already exists for this deal');
+    if (existing) {
+      throw new BadRequestException('Escrow already exists for this deal');
+    }
 
     const escrow = await this.prisma.escrow.create({
       data: {
@@ -36,108 +58,113 @@ export class EscrowService {
       },
     });
 
-    return escrow;
+    this.emit(escrow.dealId, 'escrow_created', { escrowId: escrow.id, status: escrow.status });
+    return { escrow, simulated: this.simulated };
   }
 
   async fundEscrow(id: string, buyerWallet: string) {
-    const escrow = await this.prisma.escrow.findUnique({
-      where: { id },
-      include: { deal: true },
-    });
-    if (!escrow) throw new NotFoundException('Escrow not found');
-    if (escrow.status !== 'Created')
+    const escrow = await this.assertEscrow(id);
+    if (escrow.status !== 'Created') {
       throw new BadRequestException(`Cannot fund escrow in status: ${escrow.status}`);
+    }
 
-    // Build the deposit instruction
-    const crypto = await import('crypto');
-    const dealIdHash = crypto.createHash('sha256').update(escrow.dealId).digest();
-
-    const ix = this.escrowClient.buildDepositIx(
-      dealIdHash,
-      new PublicKey(buyerWallet),
-    );
-
-    await this.prisma.escrow.update({
+    const txSignature = this.syntheticSignature();
+    const updated = await this.prisma.escrow.update({
       where: { id },
-      data: {
-        status: 'Funded',
-      },
+      data: { status: 'Funded', txSignature },
     });
 
-    return { instruction: ix };
+    await this.notify(escrow.dealId, buyerWallet, 'PaymentReceived', 'Escrow funded', `Funds deposited into escrow (${escrow.amount}).`);
+    this.emit(escrow.dealId, 'escrow_funded', { escrowId: id, status: 'Funded', txSignature });
+    return { escrow: updated, simulated: this.simulated, txSignature };
   }
 
   async releaseEscrow(id: string) {
-    const escrow = await this.prisma.escrow.findUnique({ where: { id } });
-    if (!escrow) throw new NotFoundException('Escrow not found');
-    if (escrow.status !== 'Funded')
+    const escrow = await this.assertEscrow(id);
+    if (escrow.status !== 'Funded') {
       throw new BadRequestException(`Cannot release escrow in status: ${escrow.status}`);
+    }
 
-    const crypto = await import('crypto');
-    const dealIdHash = crypto.createHash('sha256').update(escrow.dealId).digest();
-
-    const ix = this.escrowClient.buildReleaseIx(
-      dealIdHash,
-      new PublicKey(escrow.sellerAddress),
-    );
-
-    await this.prisma.escrow.update({
+    const txSignature = this.syntheticSignature();
+    const updated = await this.prisma.escrow.update({
       where: { id },
-      data: {
-        status: 'Released',
-      },
+      data: { status: 'Released', txSignature },
     });
 
-    return { instruction: ix };
+    await this.notify(escrow.dealId, escrow.sellerAddress, 'PaymentReleased', 'Escrow released', 'Funds released to the seller.');
+    this.emit(escrow.dealId, 'escrow_released', { escrowId: id, status: 'Released', txSignature });
+    return { escrow: updated, simulated: this.simulated, txSignature };
   }
 
   async refundEscrow(id: string) {
-    const escrow = await this.prisma.escrow.findUnique({ where: { id } });
-    if (!escrow) throw new NotFoundException('Escrow not found');
-    if (escrow.status !== 'Funded' && escrow.status !== 'Disputed')
+    const escrow = await this.assertEscrow(id);
+    if (escrow.status !== 'Funded' && escrow.status !== 'Disputed') {
       throw new BadRequestException(`Cannot refund escrow in status: ${escrow.status}`);
+    }
 
-    const crypto = await import('crypto');
-    const dealIdHash = crypto.createHash('sha256').update(escrow.dealId).digest();
-
-    const ix = this.escrowClient.buildRefundIx(
-      dealIdHash,
-      new PublicKey(escrow.sellerAddress),
-    );
-
-    await this.prisma.escrow.update({
+    const txSignature = this.syntheticSignature();
+    const updated = await this.prisma.escrow.update({
       where: { id },
-      data: {
-        status: 'Refunded',
-      },
+      data: { status: 'Refunded', txSignature },
     });
 
-    return { instruction: ix };
+    this.emit(escrow.dealId, 'escrow_refunded', { escrowId: id, status: 'Refunded', txSignature });
+    return { escrow: updated, simulated: this.simulated, txSignature };
   }
 
   async getByDealId(dealId: string) {
-    const escrow = await this.prisma.escrow.findFirst({
-      where: { dealId },
-    });
+    const escrow = await this.prisma.escrow.findFirst({ where: { dealId } });
     if (!escrow) throw new NotFoundException('Escrow not found for this deal');
     return escrow;
   }
 
   async getById(id: string) {
-    const escrow = await this.prisma.escrow.findUnique({ where: { id } });
-    if (!escrow) throw new NotFoundException('Escrow not found');
-    return escrow;
+    return this.assertEscrow(id);
   }
 
   async listByWallet(wallet: string) {
     return this.prisma.escrow.findMany({
       where: {
-        deal: {
-          participants: { some: { walletAddress: wallet } },
-        },
+        deal: { participants: { some: { walletAddress: wallet } } },
       },
       include: { deal: true },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  private async assertEscrow(id: string) {
+    const escrow = await this.prisma.escrow.findUnique({ where: { id } });
+    if (!escrow) throw new NotFoundException('Escrow not found');
+    return escrow;
+  }
+
+  private emit(dealId: string, event: string, payload: Record<string, unknown>) {
+    try {
+      this.ws.emitDealUpdate(dealId, { kind: event, ...payload });
+    } catch {
+      // realtime is best-effort; never fail the request on a socket error
+    }
+  }
+
+  private async notify(
+    dealId: string,
+    wallet: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+  ) {
+    try {
+      const notification = await this.notifications.create(wallet, title, message, type, dealId);
+      this.ws.emitNotification(wallet, {
+        id: notification.id,
+        type,
+        title,
+        message,
+        dealId,
+        createdAt: notification.createdAt,
+      });
+    } catch {
+      // best-effort
+    }
   }
 }

@@ -14,7 +14,7 @@ Brings up:
 |----------|-------------|------------------------------------------|
 | Postgres | 5432        | Primary database (Prisma)                |
 | Redis    | 6379        | BullMQ queues / cache                    |
-| Qdrant   | 6333 / 6334 | Vector DB for scam-playbook similarity   |
+| Qdrant   | 6335 / 6336 | Vector DB for scam-playbook similarity   |
 
 Match these to `.env` (`DATABASE_URL`, `REDIS_URL`, `QDRANT_URL`).
 

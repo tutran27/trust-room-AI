@@ -3,9 +3,11 @@ import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../database/database.module';
 import { DisputesController } from './disputes.controller';
 import { DisputesService } from './disputes.service';
+import { WebsocketModule } from '../websocket/websocket.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule],
+  imports: [DatabaseModule, AuthModule, WebsocketModule, NotificationsModule],
   controllers: [DisputesController],
   providers: [DisputesService],
   exports: [DisputesService],

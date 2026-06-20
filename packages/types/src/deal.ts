@@ -82,6 +82,15 @@ export const dealActionSchema = z.enum([
   'publish',
   'open-invitation',
   'verify-wallets',
+  'create-escrow',
+  'deposit',
+  'start-negotiation',
+  'confirm-terms',
+  'submit-delivery',
+  'mark-ready',
+  'release',
+  'raise-dispute',
+  'refund',
   'cancel',
 ]);
 export type DealAction = z.infer<typeof dealActionSchema>;

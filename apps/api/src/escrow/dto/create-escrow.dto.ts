@@ -1,29 +1,21 @@
+import { IsOptional, IsString, Matches } from 'class-validator';
+
+/**
+ * Create-escrow payload. Kept minimal to match what the simulated escrow stores.
+ * `amount` is a decimal string to avoid float precision loss.
+ */
 export class CreateEscrowDto {
+  @IsString()
   dealId!: string;
-  buyerWallet!: string;
+
+  @IsString()
+  @Matches(/^\d+(\.\d+)?$/, { message: 'amount must be a positive decimal string' })
+  amount!: string;
+
+  @IsString()
   sellerWallet!: string;
-  amount!: number;
-  tokenMint!: string;
-  escrowPda!: string;
-  escrowBump!: number;
-  escrowAta!: string;
-  buyerNftAta!: string;
-  sellerNftAta!: string;
-  arbiterWallet!: string;
-  arbiterNftAta!: string;
-  arbiterFeePercent!: number;
-  arbiterFeeAmount!: number;
-  arbiterFeeClaimed!: boolean;
-  arbiterFeeClaimedAt?: Date;
-  arbiterFeeClaimedTx?: string;
-  arbiterFeeClaimedError?: string;
-  arbiterFeeClaimedRetries!: number;
-  arbiterFeeClaimedMaxRetries!: number;
-  arbiterFeeClaimedNextRetryAt?: Date;
-  arbiterFeeClaimedLastRetryAt?: Date;
-  arbiterFeeClaimedLastRetryError?: string;
-  arbiterFeeClaimedLastRetryTx?: string;
-  arbiterFeeClaimedLastRetryRetries!: number;
-  arbiterFeeClaimedLastRetryMaxRetries!: number;
-  arbiterFeeClaimedLastRetryNextRetryAt?: Date;
+
+  @IsOptional()
+  @IsString()
+  buyerWallet?: string;
 }

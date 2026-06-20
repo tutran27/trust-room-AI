@@ -15,13 +15,16 @@
     "build": "prisma generate && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:push": "prisma db push",
+    "seed": "node prisma/seed.js",
     "migrate:dev": "prisma migrate dev",
     "studio": "prisma studio",
     "clean": "rimraf dist .turbo generated *.tsbuildinfo"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",
-    "@prisma/client": "^5.22.0"
+    "@prisma/client": "^5.22.0",
+    "bs58": "^6.0.0",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "prisma": "^5.22.0",

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Button } from '@trustroom/ui';
 
 const PILLARS = [
@@ -36,9 +37,15 @@ export default function HomePage() {
           escrow, and tamper-evident evidence — so you can trade with strangers safely.
         </p>
         <div className="mt-8 flex justify-center gap-3">
-          <Button>Start a Deal</Button>
-          <Button variant="secondary">Join a Deal</Button>
-          <Button variant="ghost">View Demo</Button>
+          <Link href="/dashboard">
+            <Button>Mở dashboard</Button>
+          </Link>
+          <Link href="/deals/new">
+            <Button variant="secondary">Tạo deal</Button>
+          </Link>
+          <Link href="/disputes">
+            <Button variant="ghost">Xem disputes</Button>
+          </Link>
         </div>
       </section>
 

@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   getLLMClient,
   detectScam,
@@ -8,18 +7,24 @@ import {
   summarizeDeal,
   getRecommendations,
   extractTerms,
+  llmAvailable,
   type LLMClient,
   type DealProfile,
 } from '@trustroom/ai';
 
+/**
+ * AI service. The underlying @trustroom/ai functions each degrade to a
+ * deterministic heuristic when no LLM key is configured, so every method here is
+ * safe to call with zero external setup. `available` reports whether a real LLM
+ * is wired (Groq/OpenAI key present).
+ */
 @Injectable()
 export class AiService {
-  private readonly llmClient: LLMClient;
+  // Auto-resolves Groq-first, then OpenAI, from the environment.
+  private readonly llmClient: LLMClient = getLLMClient();
 
-  constructor(private readonly config: ConfigService) {
-    this.llmClient = getLLMClient({
-      apiKey: this.config.get<string>('OPENAI_API_KEY'),
-    });
+  get available(): boolean {
+    return llmAvailable();
   }
 
   async analyzeDeal(profileOrDescription: DealProfile | string) {
@@ -27,14 +32,22 @@ export class AiService {
       typeof profileOrDescription === 'string'
         ? { description: profileOrDescription }
         : profileOrDescription;
-    const terms = extractTerms(this.llmClient, profile.description || '');
-    const risk = await classifyRisk(this.llmClient, profile);
-    const scamCheck = await detectScam(this.llmClient, profile.description || '');
+    const description = profile.description || '';
 
-    return { terms, risk, scamCheck };
+    const [terms, risk, scamCheck] = await Promise.all([
+      extractTerms(this.llmClient, description),
+      classifyRisk(this.llmClient, profile),
+      detectScam(this.llmClient, description),
+    ]);
+
+    return { terms, risk, scamCheck, llmAvailable: this.available };
   }
 
-  async analyzeDispute(dealDescription: string, buyerEvidence: string[], sellerEvidence: string[]) {
+  async analyzeDispute(
+    dealDescription: string,
+    buyerEvidence: string[],
+    sellerEvidence: string[],
+  ) {
     return analyzeDispute(this.llmClient, dealDescription, buyerEvidence, sellerEvidence);
   }
 
@@ -46,7 +59,10 @@ export class AiService {
     return summarizeDeal(this.llmClient, text);
   }
 
-  async getRecommendation(userProfile: Record<string, unknown>, dealHistory: Record<string, unknown>[]) {
+  async getRecommendation(
+    userProfile: Record<string, unknown>,
+    dealHistory: Record<string, unknown>[],
+  ) {
     return getRecommendations(this.llmClient, userProfile, dealHistory);
   }
 }

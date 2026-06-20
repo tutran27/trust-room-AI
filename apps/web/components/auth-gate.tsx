@@ -1,0 +1,46 @@
+'use client';
+
+import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Spinner } from '@trustroom/ui';
+import { useAuth } from '../providers/auth-provider';
+
+export function AuthGate({ children }: { children: React.ReactNode }) {
+  const { status, error, connect } = useAuth();
+
+  if (status === 'connecting') {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="flex items-center gap-3 text-slate-300">
+          <Spinner />
+          <span>Đang kết nối ví và xác thực phiên…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (status !== 'authenticated') {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center px-6">
+        <Card className="w-full max-w-xl">
+          <CardHeader>
+            <CardTitle>Đăng nhập để tiếp tục</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-slate-300">
+              Demo hiện hỗ trợ ví nội bộ để bạn chạy full flow mà không cần Phantom. Nếu máy bạn có
+              Phantom, bạn cũng có thể dùng ví thật.
+            </p>
+            {error ? <Alert variant="danger" title="Không thể xác thực">{error}</Alert> : null}
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={() => connect('demo')}>Dùng demo wallet</Button>
+              <Button variant="secondary" onClick={() => connect('phantom')}>
+                Kết nối Phantom
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
