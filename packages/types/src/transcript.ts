@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { speakerRoleSchema } from './risk.js';
+import { speakerRoleSchema } from './risk';
 
 /**
  * A speaker-attributed transcript chunk emitted by the Agora STT pipeline.

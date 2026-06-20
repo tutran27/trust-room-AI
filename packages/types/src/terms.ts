@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dealTypeSchema, tokenSchema } from './deal.js';
+import { dealTypeSchema, tokenSchema } from './deal';
 
 /**
  * Structured deal terms produced by the AI Deal Notary from the live conversation.

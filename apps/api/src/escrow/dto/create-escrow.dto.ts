@@ -1,0 +1,29 @@
+export class CreateEscrowDto {
+  dealId!: string;
+  buyerWallet!: string;
+  sellerWallet!: string;
+  amount!: number;
+  tokenMint!: string;
+  escrowPda!: string;
+  escrowBump!: number;
+  escrowAta!: string;
+  buyerNftAta!: string;
+  sellerNftAta!: string;
+  arbiterWallet!: string;
+  arbiterNftAta!: string;
+  arbiterFeePercent!: number;
+  arbiterFeeAmount!: number;
+  arbiterFeeClaimed!: boolean;
+  arbiterFeeClaimedAt?: Date;
+  arbiterFeeClaimedTx?: string;
+  arbiterFeeClaimedError?: string;
+  arbiterFeeClaimedRetries!: number;
+  arbiterFeeClaimedMaxRetries!: number;
+  arbiterFeeClaimedNextRetryAt?: Date;
+  arbiterFeeClaimedLastRetryAt?: Date;
+  arbiterFeeClaimedLastRetryError?: string;
+  arbiterFeeClaimedLastRetryTx?: string;
+  arbiterFeeClaimedLastRetryRetries!: number;
+  arbiterFeeClaimedLastRetryMaxRetries!: number;
+  arbiterFeeClaimedLastRetryNextRetryAt?: Date;
+}

@@ -75,18 +75,41 @@ export type DealType = z.infer<typeof dealTypeSchema>;
 export const tokenSchema = z.enum(['SOL', 'USDC', 'SPL_TOKEN']);
 export type Token = z.infer<typeof tokenSchema>;
 
+export const participantRoleSchema = z.enum(['buyer', 'seller']);
+export type ParticipantRole = z.infer<typeof participantRoleSchema>;
+
+export const dealActionSchema = z.enum([
+  'publish',
+  'open-invitation',
+  'verify-wallets',
+  'cancel',
+]);
+export type DealAction = z.infer<typeof dealActionSchema>;
+
+export const solanaAddressSchema = z
+  .string()
+  .regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, 'Invalid Solana address.');
+
+export const decimalAmountSchema = z
+  .string()
+  .regex(/^(?:0|[1-9]\d{0,19})(?:\.\d{1,18})?$/, 'Invalid decimal amount format.')
+  .refine((value) => !/^0(?:\.0+)?$/.test(value), 'Amount must be greater than zero.');
+
 export const dealSchema = z.object({
   id: z.string(),
   title: z.string().min(1),
+  description: z.string().nullable().optional(),
   type: dealTypeSchema,
   buyerWallet: z.string().nullable(),
   sellerWallet: z.string().nullable(),
-  amount: z.string(), // store as string to avoid float precision loss
+  amount: decimalAmountSchema, // store as string to avoid float precision loss
   token: tokenSchema,
   status: dealStatusSchema,
   deadline: z.string().datetime().nullable(),
   termsHash: z.string().nullable(),
   evidenceHash: z.string().nullable(),
   createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime().optional(),
+  version: z.number().int().nonnegative().optional(),
 });
 export type Deal = z.infer<typeof dealSchema>;

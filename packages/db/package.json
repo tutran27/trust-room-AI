@@ -1,0 +1,31 @@
+{
+  "name": "@trustroom/db",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:push": "prisma db push",
+    "migrate:dev": "prisma migrate dev",
+    "studio": "prisma studio",
+    "clean": "rimraf dist .turbo generated *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.4.0",
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.6.0"
+  }
+}

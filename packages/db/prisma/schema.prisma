@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DealStatus {
+  Draft
+  Created
+  WaitingForCounterparty
+  WalletVerified
+  EscrowCreated
+  Deposited
+  Negotiating
+  TermsConfirmed
+  DeliverySubmitted
+  ReadyToRelease
+  Released
+  Disputed
+  ResolvedRelease
+  ResolvedRefund
+  ResolvedSplit
+  Refunded
+  Cancelled
+  Expired
+}
+
+enum DealType {
+  freelance_service
+  nft
+  token_otc
+  digital_goods
+  domain
+  other
+}
+
+enum Token {
+  SOL
+  USDC
+  SPL_TOKEN
+}
+
+enum ParticipantRole {
+  buyer
+  seller
+}
+
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  wallets Wallet[]
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  address   String   @unique
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuthNonce {
+  challengeId String   @id @default(cuid())
+  wallet      String
+  nonceHash   String
+  domain      String
+  uri         String
+  issuedAt    DateTime
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([wallet, createdAt])
+  @@index([wallet, usedAt, expiresAt])
+}
+
+model Deal {
+  id          String      @id @default(cuid())
+  title       String
+  description String?
+  type        DealType
+  amount      Decimal     @db.Decimal(38, 18)
+  token       Token
+  status      DealStatus  @default(Draft)
+  deadline    DateTime?
+  version     Int         @default(0)
+  termsHash   String?
+  evidenceHash String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  participants DealParticipant[]
+  events       DealEvent[]
+  escrow       Escrow?
+  disputes     Dispute[]
+
+  @@index([status])
+  @@index([updatedAt, id])
+}
+
+model DealParticipant {
+  id            String          @id @default(cuid())
+  dealId        String
+  walletAddress String
+  role          ParticipantRole
+  joinedAt      DateTime        @default(now())
+  confirmed     Boolean         @default(false)
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@unique([dealId, role])
+  @@unique([dealId, walletAddress])
+  @@index([walletAddress])
+}
+
+model DealEvent {
+  id          String   @id @default(cuid())
+  dealId      String
+  actorWallet String
+  type        String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId, createdAt])
+  @@index([dealId, type])
+}
+
+// ─── Escrow ──────────────────────────────────────────────────────────
+
+enum EscrowStatus {
+  Created
+  Funded
+  Released
+  Refunded
+  Disputed
+}
+
+model Escrow {
+  id            String       @id @default(cuid())
+  dealId        String       @unique
+  amount        Decimal      @db.Decimal(38, 18)
+  sellerAddress String
+  status        EscrowStatus @default(Created)
+  txSignature   String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+}
+
+// ─── Disputes ────────────────────────────────────────────────────────
+
+enum DisputeStatus {
+  Open
+  UnderReview
+  Resolved
+  Escalated
+}
+
+enum DisputeResolution {
+  ReleaseToSeller
+  RefundToBuyer
+  SplitPayment
+}
+
+model Dispute {
+  id            String            @id @default(cuid())
+  dealId        String
+  raisedBy      String
+  reason        String
+  status        DisputeStatus     @default(Open)
+  resolution    DisputeResolution?
+  aiSummary     String?
+  aiConfidence  Float?
+  resolvedAt    DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  deal      Deal       @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  evidence  Evidence[]
+
+  @@index([dealId])
+  @@index([status])
+}
+
+// ─── Evidence ────────────────────────────────────────────────────────
+
+model Evidence {
+  id        String   @id @default(cuid())
+  disputeId String
+  type      String
+  content   String
+  url       String?
+  hash      String?
+  createdAt DateTime @default(now())
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId])
+}
+
+// ─── Notifications ───────────────────────────────────────────────────
+
+enum NotificationType {
+  DealCreated
+  DealStatusChanged
+  DisputeOpened
+  DisputeResolved
+  PaymentReceived
+  PaymentReleased
+  EvidenceUploaded
+  AiAlert
+  SystemMessage
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  wallet    String
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  dealId    String?
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  @@index([wallet, read, createdAt])
+  @@index([wallet, type])
+}
+
+// ─── Reputation ──────────────────────────────────────────────────────
+
+model Reputation {
+  id              String   @id @default(cuid())
+  wallet          String   @unique
+  completedDeals  Int      @default(0)
+  successfulDeals Int      @default(0)
+  disputedDeals   Int      @default(0)
+  totalVolume     Decimal  @db.Decimal(38, 18) @default(0)
+  score           Float    @default(0)
+  lastUpdated     DateTime @default(now())
+
+  @@index([score])
+}
+
+// ─── Agora (Governance) ───────────────────────────────────────────
+
+enum AgoraStatus {
+  OPEN
+  CLOSED
+  PASSED
+  FAILED
+}
+
+model Agora {
+  id            String       @id @default(cuid())
+  creatorWallet String
+  title         String
+  description   String
+  category      String
+  tokenMint     String?
+  status        AgoraStatus @default(OPEN)
+  totalVotes    Int          @default(0)
+  totalStaked   Decimal      @db.Decimal(38, 18) @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  votes Vote[]
+
+  @@index([creatorWallet])
+  @@index([status])
+  @@index([category])
+}
+
+model Vote {
+  id        String   @id @default(cuid())
+  agoraId   String
+  wallet    String
+  support   Boolean
+  amount    Decimal  @db.Decimal(38, 18)
+  votePower Int      @default(1)
+  createdAt DateTime @default(now())
+
+  agora Agora @relation(fields: [agoraId], references: [id], onDelete: Cascade)
+
+  @@unique([agoraId, wallet])
+  @@index([agoraId])
+}

@@ -4,6 +4,11 @@
  */
 export const DealEvent = {
   DealCreated: 'deal.created',
+  DealUpdated: 'deal.updated',
+  DealSellerInvited: 'deal.seller_invited',
+  DealPublished: 'deal.published',
+  DealInvitationOpened: 'deal.invitation_opened',
+  DealCancelled: 'deal.cancelled',
   DealJoined: 'deal.joined',
   WalletConnected: 'wallet.connected',
   WalletVerified: 'wallet.verified',

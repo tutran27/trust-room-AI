@@ -1,4 +1,7 @@
 import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
+export { Connection, PublicKey, clusterApiUrl };
+export { EscrowClient, ESCROW_PROGRAM_ID, EscrowState, DisputeOutcome } from './anchor-client';
+export type { EscrowAccountData } from './anchor-client';
 
 export type SolanaCluster = 'devnet' | 'testnet' | 'mainnet-beta';
 
