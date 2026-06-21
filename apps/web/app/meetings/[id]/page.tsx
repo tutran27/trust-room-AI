@@ -9,7 +9,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   Input,
@@ -211,14 +210,11 @@ export default function MeetingDetailPage() {
   const stopSttMutation = useStopMeetingStt(meetingId ?? '');
 
   const agoraUid = useMemo(() => {
-    // Use a random UID per session to avoid collisions when multiple users
-    // share the same demo wallet address.
     const base = address ?? 'guest';
     let hash = 0;
     for (let index = 0; index < base.length; index += 1) {
       hash = (hash * 31 + base.charCodeAt(index)) >>> 0;
     }
-    // Mix in a random component so each browser tab gets a unique UID
     const salt = typeof window !== 'undefined'
       ? parseInt(sessionStorage.getItem('agora_uid_salt') ?? '0', 10) || (() => {
           const s = Math.floor(Math.random() * 900_000) + 100_000;
@@ -287,7 +283,7 @@ export default function MeetingDetailPage() {
   const startSttErrorMessage =
     startSttMutation.error instanceof Error
       ? startSttMutation.error.message
-      : 'Lá»—i khÃ´ng xÃ¡c Ä‘á»‹nh.';
+      : 'Lỗi không xác định.';
   const startRealtimeDisabled =
     startSttMutation.isPending || !meetingId || isRealtimeRunning;
   const startRealtimeDisabledReason = startSttMutation.isPending
@@ -555,7 +551,6 @@ export default function MeetingDetailPage() {
     <AuthGate>
       <AppShell
         title={meeting?.title ?? 'Meeting room'}
-        subtitle="Phòng đàm phán trực tiếp với video lớn, transcript realtime và cảnh báo rủi ro ngay trong cùng một màn hình."
         contentClassName="max-w-[1920px] px-3 md:px-5 2xl:px-8"
         actions={
           <>
@@ -572,7 +567,7 @@ export default function MeetingDetailPage() {
       >
         {meetingQuery.isLoading ? (
           <div className="grid gap-6">
-            <Skeleton className="h-[760px] rounded-[32px]" />
+            <Skeleton className="h-[760px]" />
           </div>
         ) : meetingQuery.isError || !meeting ? (
           <Alert variant="danger" title="Không tải được meeting">
@@ -581,8 +576,9 @@ export default function MeetingDetailPage() {
         ) : (
           <div className="grid gap-6 2xl:grid-cols-[2.2fr_0.8fr]">
             <div className="space-y-6">
-              <Card className="overflow-hidden border-cyan-500/15 bg-[linear-gradient(180deg,rgba(8,15,32,0.95),rgba(5,10,20,0.98))]">
-                <CardHeader className="border-b border-white/10 pb-5">
+              {/* Call Room Card */}
+              <Card className="overflow-hidden">
+                <CardHeader className="border-b border-white/[0.06] pb-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -602,13 +598,10 @@ export default function MeetingDetailPage() {
                         <Badge variant="muted">{transcripts.length} transcripts</Badge>
                       </div>
                       <div>
-                        <CardTitle className="text-2xl">Call room</CardTitle>
-                        <CardDescription>
-                          Video được ưu tiên diện tích lớn hơn, các khối phụ được dồn sang cột phải để màn họp thoáng và dễ nhìn.
-                        </CardDescription>
+                        <CardTitle className="text-lg">Call room</CardTitle>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         variant="secondary"
                         onClick={() => statusMutation.mutate({ status: 'Active' })}
@@ -643,11 +636,12 @@ export default function MeetingDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-cyan-500/15 bg-slate-950/85">
-                <CardHeader className="border-b border-white/10 pb-5">
+              {/* Transcript Card */}
+              <Card>
+                <CardHeader className="border-b border-white/[0.06] pb-5">
                   <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                      <CardTitle className="text-xl">Transcript realtime</CardTitle>
+                      <CardTitle className="text-lg">Transcript</CardTitle>
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge
                           variant={
@@ -684,9 +678,6 @@ export default function MeetingDetailPage() {
                           </Badge>
                         ) : null}
                       </div>
-                      <CardDescription>
-                        Khung riêng cho script đang chạy trực tiếp, bản dịch và timeline đã lưu.
-                      </CardDescription>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="min-w-[180px]">
@@ -724,15 +715,11 @@ export default function MeetingDetailPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-6">
-                  
-
                   <div className="grid gap-4 xl:grid-cols-[1.12fr_0.88fr]">
-                    <div className="min-h-[680px] rounded-[30px] border border-cyan-500/20 bg-[radial-gradient(circle_at_top,rgba(8,145,178,0.14),transparent_35%),rgba(4,8,18,0.92)] p-4">
+                    {/* Live Transcript */}
+                    <div className="min-h-[680px] rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.03] p-4">
                       <div className="mb-4 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-cyan-200">Luồng live</p>
-                          <p className="text-xs text-slate-400">Những câu vừa phát ra sẽ nổi ở đây trước khi được lưu.</p>
-                        </div>
+                        <p className="text-sm font-medium text-emerald-400">Live</p>
                         <Badge variant={activeRealtimeEntries.length ? 'info' : 'muted'}>
                           {activeRealtimeEntries.length} live
                         </Badge>
@@ -743,22 +730,22 @@ export default function MeetingDetailPage() {
                           {activeRealtimeEntries.map((entry) => (
                             <div
                               key={entry.id}
-                              className="rounded-[24px] border border-cyan-400/20 bg-slate-950/55 p-4"
+                              className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
                             >
-                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge variant="muted">{entry.speakerLabel}</Badge>
                                   <Badge variant="info">{entry.language}</Badge>
                                 </div>
                                 <span>{formatRelativeTime(new Date(entry.updatedAt).toISOString())}</span>
                               </div>
-                              <p className="text-base leading-7 text-slate-50">{entry.text}</p>
+                              <p className="text-sm leading-relaxed text-zinc-100">{entry.text}</p>
                               {entry.translatedText && entry.targetLanguage ? (
-                                <div className="mt-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
-                                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80">
+                                <div className="mt-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.04] px-3 py-2">
+                                  <p className="text-[11px] uppercase tracking-wider text-emerald-400/80">
                                     Translation {entry.targetLanguage}
                                   </p>
-                                  <p className="mt-1 text-sm leading-6 text-emerald-100">
+                                  <p className="mt-1 text-sm text-emerald-300">
                                     {entry.translatedText}
                                   </p>
                                 </div>
@@ -767,10 +754,10 @@ export default function MeetingDetailPage() {
                           ))}
                         </div>
                       ) : (
-                        <div className="flex min-h-[500px] items-center justify-center rounded-[24px] border border-dashed border-cyan-500/20 bg-slate-950/40 p-8 text-center">
+                        <div className="flex min-h-[500px] items-center justify-center rounded-xl border border-dashed border-emerald-500/15 bg-white/[0.01] p-8 text-center">
                           <div className="max-w-md space-y-2">
-                            <p className="text-lg font-medium text-slate-100">Chưa có script realtime</p>
-                            <p className="text-sm leading-6 text-slate-400">
+                            <p className="text-base font-medium text-zinc-200">Chưa có script realtime</p>
+                            <p className="text-sm leading-relaxed text-zinc-500">
                               Khi STT nhận được lời nói từ cuộc họp, transcript sẽ chạy trực tiếp ở khu vực này.
                             </p>
                           </div>
@@ -778,22 +765,20 @@ export default function MeetingDetailPage() {
                       )}
                     </div>
 
-                    <div className="min-h-[680px] rounded-[30px] border border-white/10 bg-white/[0.03] p-4">
+                    {/* Saved Timeline */}
+                    <div className="min-h-[680px] rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
                       <div className="mb-4 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-slate-100">Timeline đã lưu</p>
-                          <p className="text-xs text-slate-400">Transcript được lưu để phục vụ evidence và dispute.</p>
-                        </div>
+                        <p className="text-sm font-medium text-zinc-100">Timeline đã lưu</p>
                         <Badge variant="muted">{transcripts.length} dòng</Badge>
                       </div>
 
                       {transcriptsQuery.isLoading ? (
                         <div className="space-y-3">
-                          <Skeleton className="h-20 rounded-2xl" />
-                          <Skeleton className="h-20 rounded-2xl" />
+                          <Skeleton className="h-20" />
+                          <Skeleton className="h-20" />
                         </div>
                       ) : transcripts.filter((item) => getTranscriptRiskSummary(item.id, riskEvents).count > 0).length ? (
-                        <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
+                        <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
                           {[...transcripts]
                             .reverse()
                             .filter((item) => getTranscriptRiskSummary(item.id, riskEvents).count > 0)
@@ -802,9 +787,9 @@ export default function MeetingDetailPage() {
                             return (
                               <div
                                 key={item.id}
-                                className="rounded-[24px] border border-white/10 bg-slate-950/45 p-4"
+                                className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
                               >
-                                <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                                <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-[11px] text-zinc-500">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <Badge variant="muted">{item.speakerLabel}</Badge>
                                     <Badge variant="info">{item.language}</Badge>
@@ -816,15 +801,15 @@ export default function MeetingDetailPage() {
                                   </div>
                                   <span>{item.startTime.toFixed(2)}s</span>
                                 </div>
-                                <p className="text-sm leading-6 text-slate-100">{item.content}</p>
+                                <p className="text-sm leading-relaxed text-zinc-200">{item.content}</p>
                                 {item.translations?.length ? (
-                                  <div className="mt-3 space-y-2">
+                                  <div className="mt-2 space-y-1">
                                     {item.translations.map((translation) => (
                                       <div
                                         key={translation.id}
-                                        className="rounded-2xl border border-emerald-500/15 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-100"
+                                        className="rounded-lg border border-emerald-500/10 bg-emerald-500/[0.03] px-3 py-1.5 text-xs text-emerald-300"
                                       >
-                                        <span className="mr-2 text-xs uppercase tracking-[0.16em] text-emerald-300/80">
+                                        <span className="mr-2 text-[10px] uppercase tracking-wider text-emerald-400/70">
                                           {translation.targetLanguage}
                                         </span>
                                         {translation.content}
@@ -833,7 +818,7 @@ export default function MeetingDetailPage() {
                                   </div>
                                 ) : null}
                                 {riskSummary.labels.length ? (
-                                  <div className="mt-3 flex flex-wrap gap-2">
+                                  <div className="mt-2 flex flex-wrap gap-1">
                                     {riskSummary.labels.map((label) => (
                                       <Badge key={`${item.id}-${label}`} variant="warning">
                                         {label}
@@ -857,46 +842,50 @@ export default function MeetingDetailPage() {
             </div>
 
             <div className="space-y-6">
+              {/* Risk Feed */}
               {riskQuery.isLoading || topRiskEvents.length ? (
-                <Card className="border-white/10 bg-slate-950/70">
-                <CardHeader className="pb-4">
-                  <CardTitle>Risk feed</CardTitle>
-                  <CardDescription>Chỉ giữ các cảnh báo nghi ngờ và thông tin cần phản ứng ngay.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {riskQuery.isLoading ? (
-                    <>
-                      <Skeleton className="h-24 rounded-2xl" />
-                      <Skeleton className="h-24 rounded-2xl" />
-                    </>
-                  ) : topRiskEvents.length ? (
-                    topRiskEvents.slice(0, 6).map((event) => {
-                      const linkedTranscript = event.transcriptId
-                        ? transcriptById.get(event.transcriptId)
-                        : null;
-                      const riskMessage = buildRiskFeedMessage(
-                        event,
-                        linkedTranscript?.content ?? null,
-                      );
+                <Card>
+                  <CardHeader className="pb-4">
+                    <CardTitle>Risk feed</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {riskQuery.isLoading ? (
+                      <>
+                        <Skeleton className="h-20" />
+                        <Skeleton className="h-20" />
+                      </>
+                    ) : topRiskEvents.length ? (
+                      topRiskEvents.slice(0, 6).map((event) => {
+                        const linkedTranscript = event.transcriptId
+                          ? transcriptById.get(event.transcriptId)
+                          : null;
+                        const riskMessage = buildRiskFeedMessage(
+                          event,
+                          linkedTranscript?.content ?? null,
+                        );
 
-                      return (
-                        <div
-                          key={event.id}
-                          className="rounded-[24px] border border-red-500/15 bg-[linear-gradient(180deg,rgba(68,10,12,0.35),rgba(15,6,8,0.7))] p-4"
-                        >
-                          <div className="mb-2 flex flex-wrap items-center gap-2">                            <Badge variant={riskVariant(event.severity)}>{event.severity}</Badge>                          </div>                          <p className="text-sm leading-6 text-slate-100">{riskMessage}</p>
-                        </div>
-                      );
-                    })
-                  ) : null}
-                </CardContent>
+                        return (
+                          <div
+                            key={event.id}
+                            className="rounded-xl border border-red-500/15 bg-red-500/[0.04] p-3"
+                          >
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              <Badge variant={riskVariant(event.severity)}>{event.severity}</Badge>
+                            </div>
+                            <p className="text-sm leading-relaxed text-zinc-200">{riskMessage}</p>
+                          </div>
+                        );
+                      })
+                    ) : null}
+                  </CardContent>
                 </Card>
               ) : null}
 
-              
-
-              <Card className="border-white/10 bg-slate-950/70">
-                <CardHeader className="pb-4">                  <CardTitle>Invite</CardTitle>                </CardHeader>
+              {/* Invite Card */}
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle>Invite</CardTitle>
+                </CardHeader>
                 <CardContent className="space-y-4">
                   <Input
                     value={inviteWallet}
@@ -934,24 +923,24 @@ export default function MeetingDetailPage() {
                   </Button>
 
                   {meeting.invites?.length ? (
-                    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                    <div className="space-y-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
                       {meeting.invites.slice(0, 3).map((invite) => {
                         const link = `${
                           typeof window !== 'undefined' ? window.location.origin : ''
                         }/meetings/${meeting.id}?invite=${invite.token}`;
 
                         return (
-                          <div key={invite.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
-                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <div key={invite.id} className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-2.5">
+                            <div className="mb-1.5 flex flex-wrap items-center gap-2">
                               <Badge variant="muted">{invite.role}</Badge>
                               <Badge variant={invite.status === 'Accepted' ? 'success' : 'info'}>
                                 {invite.status}
                               </Badge>
-                              <span className="text-xs text-slate-400">
+                              <span className="text-[11px] text-zinc-500">
                                 {invite.usedCount}/{invite.maxUses}
                               </span>
                             </div>
-                            <p className="break-all text-xs text-slate-400">{link}</p>
+                            <p className="break-all text-[11px] text-zinc-500">{link}</p>
                           </div>
                         );
                       })}
@@ -960,11 +949,11 @@ export default function MeetingDetailPage() {
                 </CardContent>
               </Card>
 
+              {/* Manual Transcript */}
               {isDemoTranscriptMode ? (
-                <Card className="border-amber-500/20 bg-amber-500/5">
+                <Card className="border-amber-500/15 bg-amber-500/[0.03]">
                   <CardHeader className="pb-4">
-                    <CardTitle>Manual transcript fallback</CardTitle>
-                    <CardDescription>Dùng khi cần test nhanh hoặc STT thật chưa đẩy dữ liệu vào.</CardDescription>
+                    <CardTitle>Manual transcript</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="grid gap-3 md:grid-cols-2">
@@ -985,7 +974,7 @@ export default function MeetingDetailPage() {
                       onChange={(event) => setTranscriptContent(event.target.value)}
                       placeholder="Dán transcript vào đây để lưu xuống timeline và kích hoạt kiểm tra rủi ro."
                     />
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         onClick={() => void submitTranscript()}
                         disabled={!transcriptContent.trim() || addTranscriptMutation.isPending}

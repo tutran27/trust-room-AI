@@ -52,26 +52,38 @@ export default function DisputeDetailPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-slate-300">{dispute.data.aiSummary ?? 'Chưa có AI summary riêng; backend hiện reuse description ban đầu.'}</p>
-                <div className="grid gap-3 text-sm text-slate-300 md:grid-cols-2">
-                  <div>Raised by: {shortAddress(dispute.data.raisedBy, 5, 5)}</div>
-                  <div>Deal ID: {dispute.data.dealId}</div>
-                  <div>Created: {formatDateTime(dispute.data.createdAt)}</div>
-                  <div>Resolved: {formatDateTime(dispute.data.resolvedAt)}</div>
+                <p className="text-sm text-zinc-400">{dispute.data.aiSummary ?? 'Chưa có AI summary riêng.'}</p>
+                <div className="grid gap-3 text-sm md:grid-cols-2">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Raised by</p>
+                    <p className="mt-1 font-mono text-zinc-300">{shortAddress(dispute.data.raisedBy, 5, 5)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Deal ID</p>
+                    <p className="mt-1 font-mono text-zinc-300">{dispute.data.dealId}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Created</p>
+                    <p className="mt-1 text-zinc-300">{formatDateTime(dispute.data.createdAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Resolved</p>
+                    <p className="mt-1 text-zinc-300">{formatDateTime(dispute.data.resolvedAt)}</p>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
-                  <h3 className="font-medium text-slate-100">Evidence</h3>
+                  <h3 className="text-sm font-medium text-zinc-100">Evidence</h3>
                   {dispute.data.evidence?.length ? (
                     dispute.data.evidence.map((evidence) => (
-                      <div key={evidence.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <div key={evidence.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
                         <div className="flex items-center justify-between gap-3">
-                          <p className="font-medium text-slate-100">{evidence.type}</p>
-                          <p className="text-xs text-slate-500">{formatDateTime(evidence.createdAt)}</p>
+                          <p className="text-sm font-medium text-zinc-100">{evidence.type}</p>
+                          <p className="text-[11px] text-zinc-500">{formatDateTime(evidence.createdAt)}</p>
                         </div>
-                        <p className="mt-2 text-sm text-slate-300">{evidence.content}</p>
+                        <p className="mt-2 text-sm text-zinc-400">{evidence.content}</p>
                         {evidence.url ? (
-                          <a className="mt-2 inline-block text-xs text-emerald-300 underline" href={evidence.url} target="_blank" rel="noreferrer">
+                          <a className="mt-2 inline-block text-xs text-emerald-400 hover:underline" href={evidence.url} target="_blank" rel="noreferrer">
                             {evidence.url}
                           </a>
                         ) : null}

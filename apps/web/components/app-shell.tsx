@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Avatar, Badge, Button } from '@trustroom/ui';
+import { Avatar, Button } from '@trustroom/ui';
 import { useAuth } from '../providers/auth-provider';
 import { shortAddress } from '../lib/wallet';
 
@@ -27,7 +27,7 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { address, walletKind, logout, status, connect } = useAuth();
+  const { address, logout, status, connect } = useAuth();
   const [copied, setCopied] = useState(false);
 
   async function copyAddress() {
@@ -42,72 +42,70 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.16),_transparent_35%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)] text-slate-100">
-      <header className="border-b border-white/10 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <Link href="/" className="text-lg font-semibold tracking-tight text-emerald-300">
+    <div className="min-h-screen bg-[#09090b] text-zinc-100">
+      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#09090b]/80 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3">
+          <div className="flex items-center gap-8">
+            <Link href="/" className="text-base font-semibold tracking-tight text-emerald-400">
               TrustRoom AI
             </Link>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
-              Demo-ready escrow workspace
-            </p>
+            <nav className="hidden gap-1 md:flex">
+              {NAV_ITEMS.map((item) => {
+                const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
+                      active
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
-          <nav className="hidden gap-2 md:flex">
-            {NAV_ITEMS.map((item) => {
-              const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`rounded-full px-4 py-2 text-sm transition ${
-                    active ? 'bg-emerald-400/15 text-emerald-200' : 'text-slate-300 hover:bg-white/5'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {status === 'authenticated' && address ? (
               <>
-                <Badge variant={walletKind === 'demo' ? 'warning' : 'info'}>
-                  {walletKind === 'demo' ? 'Demo wallet' : 'Phantom'}
-                </Badge>
                 <button
                   onClick={copyAddress}
                   title={copied ? 'Đã copy!' : `Copy full address: ${address}`}
-                  className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 transition hover:bg-white/10 cursor-pointer sm:flex"
+                  className="hidden items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 transition-colors duration-150 hover:bg-white/[0.06] cursor-pointer sm:flex"
                 >
                   <Avatar size="sm" address={address} showLabel={false} />
-                  <span className="text-sm text-slate-200">
+                  <span className="text-sm text-zinc-300">
                     {shortAddress(address, 5, 5)}
                   </span>
                   {copied ? (
-                    <span className="text-xs text-emerald-400">✓ copied</span>
+                    <span className="text-xs text-emerald-400">✓</span>
                   ) : (
-                    <span className="text-xs text-slate-500">copy</span>
+                    <span className="text-xs text-zinc-500">copy</span>
                   )}
                 </button>
-                <Button variant="ghost" onClick={logout}>
+                <Button variant="ghost" onClick={logout} className="text-zinc-400">
                   Đăng xuất
                 </Button>
               </>
             ) : (
-              <Button onClick={() => connect('demo')}>Bắt đầu demo</Button>
+              <Button onClick={() => connect('phantom')}>Kết nối Phantom</Button>
             )}
           </div>
         </div>
       </header>
 
       <main className={`mx-auto max-w-7xl px-6 py-8 ${contentClassName ?? ''}`}>
-        <div className="mb-8 flex flex-col gap-4 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
+        <div className="mb-8 flex flex-col gap-4 border-b border-white/[0.06] pb-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
-            {subtitle ? <p className="mt-2 max-w-3xl text-sm text-slate-300">{subtitle}</p> : null}
+            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">{title}</h1>
+            {subtitle ? (
+              <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>
+            ) : null}
           </div>
-          {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+          {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
         </div>
         {children}
       </main>
