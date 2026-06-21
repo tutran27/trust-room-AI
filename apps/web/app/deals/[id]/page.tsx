@@ -127,6 +127,19 @@ export default function DealDetailPage() {
               <Link href={`/meetings/${meetingsQuery.data[0].id}`}>
                 <Button>Vào meeting</Button>
               </Link>
+            ) : deal ? (
+              <Button
+                onClick={async () => {
+                  const meeting = await createMeeting.mutateAsync({
+                    dealId: deal.id,
+                    title: `${deal.title} - Meeting`,
+                  });
+                  router.push(`/meetings/${meeting.id}`);
+                }}
+                disabled={createMeeting.isPending}
+              >
+                {createMeeting.isPending ? 'Đang tạo room...' : 'Tạo meeting'}
+              </Button>
             ) : null}
           </>
         }
@@ -143,66 +156,18 @@ export default function DealDetailPage() {
           <div className="grid gap-6 2xl:grid-cols-[2.08fr_0.92fr]">
             <div className="space-y-6">
               <Card className="overflow-hidden border-emerald-500/15 bg-[linear-gradient(180deg,rgba(8,15,32,0.95),rgba(5,10,20,0.98))]">
-                <CardHeader className="border-b border-white/10 pb-5">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {meetingsQuery.data?.[0] ? (
-                          <Link href={`/meetings/${meetingsQuery.data[0].id}`}>
-                            <Button >Vào meeting</Button>
-                          </Link>
-                        ) : (
-                          <Button
-                            
-                            onClick={async () => {
-                              const meeting = await createMeeting.mutateAsync({
-                                dealId: deal.id,
-                                title: `${deal.title} - Meeting`,
-                              });
-                              router.push(`/meetings/${meeting.id}`);
-                            }}
-                            disabled={createMeeting.isPending}
-                          >
-                            {createMeeting.isPending ? 'Đang tạo room...' : 'Tạo meeting'}
-                          </Button>
-                        )}
-                      </div>
-                      <div>
-                        <CardTitle className="text-2xl">Deal overview</CardTitle>
-                        <CardDescription>
-                          Tập trung lại thông tin cốt lõi của deal và các hành động lifecycle quan trọng, tránh dàn trải nhiều khối nhỏ.
-                        </CardDescription>
-                      </div>
+                <CardContent className="flex flex-col gap-3 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <CardTitle className="text-base">Deal overview</CardTitle>
+                      <span className="text-xs text-slate-400">
+                        Buyer {shortAddress(deal.buyerWallet, 4, 4)} · Seller{' '}
+                        {deal.sellerWallet ? shortAddress(deal.sellerWallet, 4, 4) : 'chưa gán'} · v{deal.version}
+                      </span>
                     </div>
-                    <div className="grid gap-2 text-sm text-slate-300 xl:text-right">
-                      <p>Buyer: {shortAddress(deal.buyerWallet, 5, 5)}</p>
-                      <p>
-                        Seller:{' '}
-                        {deal.sellerWallet ? shortAddress(deal.sellerWallet, 5, 5) : 'chưa gán'}
-                      </p>
-                      <p>Created: {formatDateTime(deal.createdAt)}</p>
-                      <p>Updated: {formatRelativeTime(deal.updatedAt)}</p>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="grid gap-5 pt-6 xl:grid-cols-[1.2fr_0.8fr]">
-                  <div className="space-y-4">
-                    <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="mb-2 text-sm font-medium text-slate-100">Mô tả deal</p>
-                      <p className="text-sm leading-6 text-slate-300">
-                        {deal.description || 'Chưa có mô tả.'}
-                      </p>
-                    </div>
-
-                    <Textarea
-                      rows={4}
-                      value={editDescription || deal.description || ''}
-                      onChange={(event) => setEditDescription(event.target.value)}
-                      placeholder="Cập nhật mô tả deal"
-                    />
-
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
+                        className="px-3 py-1.5 text-xs"
                         variant="secondary"
                         onClick={() =>
                           updateDeal.mutate({
@@ -214,10 +179,10 @@ export default function DealDetailPage() {
                       >
                         Lưu mô tả
                       </Button>
-
                       {availableActions.map((action) => (
                         <Button
                           key={action}
+                          className="px-3 py-1.5 text-xs"
                           variant="ghost"
                           onClick={() =>
                             transitionDeal.mutate({
@@ -231,26 +196,26 @@ export default function DealDetailPage() {
                         </Button>
                       ))}
                     </div>
-
-                    {(transitionDeal.error || updateDeal.error) ? (
-                      <Alert variant="danger" title="Không thể cập nhật deal">
-                        {(transitionDeal.error instanceof Error && transitionDeal.error.message) ||
-                          (updateDeal.error instanceof Error && updateDeal.error.message) ||
-                          'Lỗi không xác định.'}
-                      </Alert>
-                    ) : null}
                   </div>
 
-                  {!deal.sellerWallet ? (
-                    <div className="rounded-[28px] border border-amber-500/20 bg-amber-500/5 p-4">
-                      <p className="mb-3 text-sm font-medium text-amber-200">Mời seller</p>
-                      <div className="flex flex-col gap-3">
+                  <div className="grid gap-3 lg:grid-cols-[1.4fr_0.6fr]">
+                    <Textarea
+                      rows={2}
+                      value={editDescription || deal.description || ''}
+                      onChange={(event) => setEditDescription(event.target.value)}
+                      placeholder="Cập nhật mô tả deal"
+                    />
+
+                    {!deal.sellerWallet ? (
+                      <div className="flex flex-col gap-2 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3">
+                        <p className="text-xs font-medium text-amber-200">Mời seller</p>
                         <Input
                           value={sellerWallet}
                           onChange={(event) => setSellerWallet(event.target.value)}
                           placeholder="Nhập wallet seller"
                         />
                         <Button
+                          className="px-3 py-1.5 text-xs"
                           onClick={() =>
                             inviteSeller.mutate({
                               sellerWallet,
@@ -262,18 +227,21 @@ export default function DealDetailPage() {
                           Mời seller
                         </Button>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm font-medium text-slate-100">??i t?c s?n s?ng</p>
-                      <p className="mt-2 text-sm text-slate-300">
-                        Seller hiện tại là {shortAddress(deal.sellerWallet, 5, 5)}.
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        v{deal.version} • deadline {formatDateTime(deal.deadline)}
-                      </p>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="flex flex-col justify-center rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-xs text-slate-400">
+                        <p>deadline {formatDateTime(deal.deadline)}</p>
+                        <p>updated {formatRelativeTime(deal.updatedAt)}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {(transitionDeal.error || updateDeal.error) ? (
+                    <Alert variant="danger" title="Không thể cập nhật deal">
+                      {(transitionDeal.error instanceof Error && transitionDeal.error.message) ||
+                        (updateDeal.error instanceof Error && updateDeal.error.message) ||
+                        'Lỗi không xác định.'}
+                    </Alert>
+                  ) : null}
                 </CardContent>
               </Card>
 
