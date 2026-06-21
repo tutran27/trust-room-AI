@@ -81,8 +81,16 @@ export async function signAndSendTx(txBase64: string): Promise<string> {
     preflightCommitment: 'confirmed',
   });
 
-  // Wait for confirmation
-  await connection.confirmTransaction(signature, 'confirmed');
+  // Wait for confirmation using blockheight strategy (avoids "Blockhash not found" on devnet)
+  const latestBlockhash = await connection.getLatestBlockhash();
+  await connection.confirmTransaction(
+    {
+      signature,
+      blockhash: latestBlockhash.blockhash,
+      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+    },
+    'confirmed',
+  );
 
   return signature;
 }

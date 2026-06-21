@@ -41,9 +41,8 @@ const DEAL_TYPE_OPTIONS = [
 ] as const;
 
 const TOKEN_OPTIONS = [
-  { label: 'USDC', value: 'USDC' },
   { label: 'SOL', value: 'SOL' },
-  { label: 'SPL Token', value: 'SPL_TOKEN' },
+  { label: 'USDC', value: 'USDC' },
 ] as const;
 
 function riskVariant(level?: string) {
@@ -78,7 +77,7 @@ export default function CreateDealPage() {
       description: '',
       type: 'freelance_service',
       amount: '100',
-      token: 'USDC',
+      token: 'SOL',
       deadline: '',
       sellerWallet: '',
     },
