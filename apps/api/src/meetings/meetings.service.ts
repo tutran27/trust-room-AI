@@ -23,6 +23,7 @@ interface AgoraSttAgentSummary {
   agent_id: string;
   status: string;
   start_ts?: number;
+  channel_name?: string;
 }
 
 interface AgoraSttJoinResponse {
@@ -597,6 +598,11 @@ export class MeetingsService {
     const targetLanguages = dto.targetLanguages?.filter(Boolean) ?? [];
     const pusherUid = this.getSttPusherUid(sessionId);
     const botToken = this.generateAgoraToken(sessionId, pusherUid, 1, 3600);
+    const requestedMode: MeetingSttState['mode'] =
+      dto.enableTranslation && targetLanguages.length > 0 && languages.length === 1
+        ? 'asr_translate'
+        : 'asr_only';
+
     const basePayload = {
       name: this.buildSttAgentName(sessionId),
       languages,
@@ -643,6 +649,35 @@ export class MeetingsService {
             'Project Agora hiện chưa bật dịch vụ Speech-to-Text, nên hệ thống đang dùng transcript thủ công/demo.',
           );
         }
+        const existingAfterTranslationAttempt = await this.findSttAgentWithRetry(sessionId, [
+          400,
+          1000,
+          1800,
+        ]);
+        if (existingAfterTranslationAttempt) {
+          return {
+            enabled: true,
+            mode: 'asr_only',
+            status: 'fallback_asr_only',
+            agentId: existingAfterTranslationAttempt.agent_id,
+            pusherUid,
+            languages,
+            targetLanguages: [],
+            fallbackReason:
+              'Agora translation gặp lỗi nội bộ, nhưng session STT đã tồn tại nên hệ thống tiếp tục bằng ASR-only.',
+          };
+        }
+        const recovered = await this.tryRecoverExistingSttAgent(
+          sessionId,
+          error,
+          languages,
+          targetLanguages,
+          pusherUid,
+          requestedMode,
+        );
+        if (recovered) {
+          return recovered;
+        }
         this.logger.warn(
           `Agora translation start failed for meeting ${sessionId}; retrying ASR-only. ${
             error instanceof Error ? error.message : String(error)
@@ -672,6 +707,45 @@ export class MeetingsService {
         return this.buildDemoSttState(
           'Project Agora hiện chưa bật dịch vụ Speech-to-Text, nên hệ thống đang dùng transcript thủ công/demo.',
         );
+      }
+      if (this.isAgoraSttConflictError(error)) {
+        await this.cleanupSttAgents(sessionId);
+        await this.wait(1200);
+        try {
+          const retriedAsrOnly = await this.callAgoraSttJoin({
+            ...basePayload,
+            name: this.buildSttAgentName(sessionId),
+          });
+          return {
+            enabled: true,
+            mode: 'asr_only',
+            status:
+              dto.enableTranslation && targetLanguages.length > 0
+                ? 'fallback_asr_only'
+                : 'running',
+            agentId: retriedAsrOnly.agent_id,
+            pusherUid,
+            languages,
+            targetLanguages: [],
+            fallbackReason:
+              dto.enableTranslation && targetLanguages.length > 0
+                ? 'Agora translation unavailable. Meeting restarted with a fresh ASR-only session.'
+                : null,
+          };
+        } catch (retryError) {
+          error = retryError;
+        }
+      }
+      const recovered = await this.tryRecoverExistingSttAgent(
+        sessionId,
+        error,
+        languages,
+        targetLanguages,
+        pusherUid,
+        requestedMode,
+      );
+      if (recovered) {
+        return recovered;
       }
       this.logger.error(
         'Failed to start Agora STT agent',
@@ -865,11 +939,22 @@ export class MeetingsService {
     });
   }
 
-  private async callAgoraSttList(channelName: string) {
+  private async callAgoraSttGet(agentId: string) {
+    return this.callAgoraSttApi<AgoraSttAgentSummary | { data?: AgoraSttAgentSummary }>(
+      `/agents/${agentId}`,
+      {
+        method: 'GET',
+      },
+    );
+  }
+
+  private async callAgoraSttList(channelName: string, state?: string) {
     const query = new URLSearchParams({
       channel: channelName,
-      limit: '20',
     });
+    if (state) {
+      query.set('state', state);
+    }
 
     const payload = await this.callAgoraSttApi<AgoraSttListResponse>(
       `/agents?${query.toString()}`,
@@ -892,7 +977,7 @@ export class MeetingsService {
 
   private async findRunningSttAgent(sessionId: string) {
     try {
-      const agents = await this.callAgoraSttList(sessionId);
+      const agents = await this.callAgoraSttList(sessionId, '2');
       return (
         agents.find((agent) =>
           ['STARTED', 'RUNNING', '2', '3'].includes(String(agent.status).toUpperCase()),
@@ -913,8 +998,103 @@ export class MeetingsService {
     }
   }
 
+  private async findSttAgentWithRetry(sessionId: string, delays: number[]) {
+    let immediate = await this.findRunningSttAgent(sessionId);
+    if (immediate) {
+      return immediate;
+    }
+
+    for (const delayMs of delays) {
+      await this.wait(delayMs);
+      const recovered = await this.findRunningSttAgent(sessionId);
+      if (recovered) {
+        return recovered;
+      }
+    }
+
+    return null;
+  }
+
+  private async cleanupSttAgents(sessionId: string) {
+    try {
+      const agents = await this.callAgoraSttList(sessionId);
+      await Promise.all(
+        agents.map(async (agent) => {
+          try {
+            await this.callAgoraSttLeave(agent.agent_id);
+          } catch (leaveError) {
+            this.logger.warn(
+              `Failed to leave orphan Agora STT agent ${agent.agent_id} for ${sessionId}: ${
+                leaveError instanceof Error ? leaveError.message : String(leaveError)
+              }`,
+            );
+          }
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to cleanup orphan Agora STT agents for ${sessionId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private async tryRecoverExistingSttAgent(
+    sessionId: string,
+    error: unknown,
+    languages: string[],
+    targetLanguages: string[],
+    pusherUid: number,
+    requestedMode: MeetingSttState['mode'],
+  ): Promise<MeetingSttState | null> {
+    if (!this.isAgoraSttConflictError(error)) {
+      return null;
+    }
+
+    this.logger.warn(
+      `Agora STT reported duplicate or in-progress session for ${sessionId}; trying to recover active agent.`,
+    );
+
+    for (const delayMs of [300, 900, 1800]) {
+      await this.wait(delayMs);
+      const recovered = await this.findRunningSttAgent(sessionId);
+      if (!recovered) {
+        continue;
+      }
+
+      return {
+        enabled: true,
+        mode: requestedMode === 'asr_translate' ? 'asr_translate' : 'asr_only',
+        status:
+          requestedMode === 'asr_translate' && targetLanguages.length > 0
+            ? 'fallback_asr_only'
+            : 'running',
+        agentId: recovered.agent_id,
+        pusherUid,
+        languages,
+        targetLanguages: requestedMode === 'asr_translate' ? targetLanguages : [],
+        fallbackReason:
+          'Agora STT session already existed, so the meeting resumed from the active agent.',
+      };
+    }
+
+    return {
+      enabled: true,
+      mode: requestedMode === 'asr_translate' ? 'asr_translate' : 'asr_only',
+      status: 'starting',
+      agentId: null,
+      pusherUid,
+      languages,
+      targetLanguages: requestedMode === 'asr_translate' ? targetLanguages : [],
+      fallbackReason:
+        'Agora đang đồng bộ session STT cũ. Hệ thống sẽ tự nhận lại session này sau vài giây.',
+    };
+  }
+
   private buildSttAgentName(sessionId: string) {
-    return `meeting-stt-${sessionId}`.slice(0, 64);
+    const suffix = crypto.randomBytes(4).toString('hex');
+    return `meeting-stt-${sessionId}-${suffix}`.slice(0, 64);
   }
 
   private getSttPusherUid(sessionId: string) {
@@ -958,5 +1138,22 @@ export class MeetingsService {
       error.getStatus() === 400 &&
       error.message.includes('Speech-to-Text')
     );
+  }
+
+  private isAgoraSttConflictError(error: unknown) {
+    if (!(error instanceof HttpException)) {
+      return false;
+    }
+
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('same name already exists') ||
+      message.includes('another operation is already in progress') ||
+      message.includes('operation is already in progress')
+    );
+  }
+
+  private wait(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
