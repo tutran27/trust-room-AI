@@ -95,12 +95,22 @@ export default function MeetingDetailPage() {
   const stopSttMutation = useStopMeetingStt(meetingId ?? '');
 
   const agoraUid = useMemo(() => {
+    // Use a random UID per session to avoid collisions when multiple users
+    // share the same demo wallet address.
     const base = address ?? 'guest';
     let hash = 0;
     for (let index = 0; index < base.length; index += 1) {
       hash = (hash * 31 + base.charCodeAt(index)) >>> 0;
     }
-    return (hash % 900_000) + 1000;
+    // Mix in a random component so each browser tab gets a unique UID
+    const salt = typeof window !== 'undefined'
+      ? parseInt(sessionStorage.getItem('agora_uid_salt') ?? '0', 10) || (() => {
+          const s = Math.floor(Math.random() * 900_000) + 100_000;
+          sessionStorage.setItem('agora_uid_salt', String(s));
+          return s;
+        })()
+      : 0;
+    return ((hash + salt) % 900_000) + 1000;
   }, [address]);
 
   const tokenQuery = useAgoraToken(

@@ -22,8 +22,10 @@ import { StatusBadge } from '../../../components/status-badge';
 import {
   useAddEvidence,
   useConfirmEscrowCreated,
+  useConfirmTerms,
   useCreateDispute,
   useCreateEscrow,
+  useSubmitDelivery,
   useCreateMeeting,
   useDeal,
   useDetectScam,
@@ -97,6 +99,8 @@ export default function DealDetailPage() {
   const [escrowError, setEscrowError] = useState<string | null>(null);
   const getUnsignedTx = useGetUnsignedTx();
   const confirmCreated = useConfirmEscrowCreated();
+  const confirmTerms = useConfirmTerms();
+  const submitDelivery = useSubmitDelivery();
 
   const activeDisputeId = deal?.status === 'Disputed' ? undefined : undefined;
   const currentDispute = useDispute(activeDisputeId ?? null);
@@ -529,8 +533,8 @@ export default function DealDetailPage() {
                           {formatAmount(escrow.amount, deal.token)}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400">Buyer: {shortAddress(escrow.buyerAddress, 6, 6)}</p>
-                      <p className="text-xs text-slate-400">Seller: {shortAddress(escrow.sellerAddress, 6, 6)}</p>
+                      <p className="text-xs text-slate-400">Buyer: {shortAddress(escrow.buyerAddress, 6, 6)} {escrow.buyerConfirmed ? '✅' : '⏳'}</p>
+                      <p className="text-xs text-slate-400">Seller: {shortAddress(escrow.sellerAddress, 6, 6)} {escrow.sellerConfirmed ? '✅' : '⏳'}</p>
                       {escrow.txSignature ? (
                         <a
                           href={`https://solscan.io/tx/${escrow.txSignature}?cluster=devnet`}
@@ -542,20 +546,17 @@ export default function DealDetailPage() {
                         </a>
                       ) : null}
                       <div className="flex flex-wrap gap-3">
-                        {escrow.status === 'Created' ? (
+                        {escrow.status === 'Created' && address === escrow.buyerAddress ? (
                           <Button
                             disabled={escrowLoading !== null}
                             onClick={async () => {
                               setEscrowError(null);
                               setEscrowLoading('fund');
                               try {
-                                // 1. Get unsigned tx from API
                                 const res = await getUnsignedTx.mutateAsync({
                                   path: `/escrow/${escrow.id}/fund`,
                                 });
-                                // 2. Sign with Phantom + send to devnet
                                 const sig = await signAndSendTx(res.txBase64);
-                                // 3. Confirm on backend
                                 await fundEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
                               } catch (err) {
                                 setEscrowError(err instanceof Error ? err.message : 'Fund failed');
@@ -570,49 +571,129 @@ export default function DealDetailPage() {
 
                         {escrow.status === 'Funded' ? (
                           <>
-                            <Button
-                              disabled={escrowLoading !== null}
-                              onClick={async () => {
-                                setEscrowError(null);
-                                setEscrowLoading('release');
-                                try {
-                                  const res = await getUnsignedTx.mutateAsync({
-                                    path: `/escrow/${escrow.id}/release`,
-                                  });
-                                  const sig = await signAndSendTx(res.txBase64);
-                                  await releaseEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
-                                } catch (err) {
-                                  setEscrowError(err instanceof Error ? err.message : 'Release failed');
-                                } finally {
-                                  setEscrowLoading(null);
-                                }
-                              }}
-                            >
-                              {escrowLoading === 'release' ? 'Đang ký & gửi...' : 'Release (rút tiền)'}
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              disabled={escrowLoading !== null}
-                              onClick={async () => {
-                                setEscrowError(null);
-                                setEscrowLoading('refund');
-                                try {
-                                  const res = await getUnsignedTx.mutateAsync({
-                                    path: `/escrow/${escrow.id}/refund`,
-                                  });
-                                  const sig = await signAndSendTx(res.txBase64);
-                                  await refundEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
-                                } catch (err) {
-                                  setEscrowError(err instanceof Error ? err.message : 'Refund failed');
-                                } finally {
-                                  setEscrowLoading(null);
-                                }
-                              }}
-                            >
-                              {escrowLoading === 'refund' ? 'Đang ký & gửi...' : 'Refund (hoàn tiền)'}
-                            </Button>
-                          </>
-                        ) : null}
+                            {address === escrow.buyerAddress && !escrow.buyerConfirmed ? (
+                              <Button
+                                disabled={escrowLoading !== null}
+                                onClick={async () => {
+                                  setEscrowError(null);
+                                  setEscrowLoading('confirm-terms');
+                                  try {
+                                    const res = await getUnsignedTx.mutateAsync({
+                                      path: `/escrow/deal/${deal.id}/confirm-terms`,
+                                    });
+                                    if (res.txBase64) {
+                                      const sig = await signAndSendTx(res.txBase64);
+                                      await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                    } else {
+                                      // On-chain already confirmed by other party — just update DB
+                                      await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: 'skipped' });
+                                    }
+                                  } catch (err) {
+                                    setEscrowError(err instanceof Error ? err.message : 'Confirm terms failed');
+                                  } finally {
+                                    setEscrowLoading(null);
+                                  }
+                                }}
+                              >
+                                {escrowLoading === 'confirm-terms' ? 'Đang ký...' : 'Buyer: Confirm Terms'}
+                              </Button>
+                            ) : null}
+                            {address === escrow.sellerAddress && !escrow.sellerConfirmed ? (
+                              <Button
+                                disabled={escrowLoading !== null}
+                                onClick={async () => {
+                                  setEscrowError(null);
+                                  setEscrowLoading('confirm-terms');
+                                  try {
+                                    const res = await getUnsignedTx.mutateAsync({
+                                      path: `/escrow/deal/${deal.id}/confirm-terms`,
+                                    });
+                                    if (res.txBase64) {
+                                      const sig = await signAndSendTx(res.txBase64);
+                                      await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                    } else {
+                                      // On-chain already confirmed by other party — just update DB
+                                      await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: 'skipped' });
+                                    }
+                                  } catch (err) {
+                                    setEscrowError(err instanceof Error ? err.message : 'Confirm terms failed');
+                                  } finally {
+                                    setEscrowLoading(null);
+                                  }
+                                }}
+                              >
+                                {escrowLoading === 'confirm-terms' ? 'Đang ký...' : 'Seller: Confirm Terms'}
+                              </Button>
+                            ) : null}
+                            {escrow.buyerConfirmed && escrow.sellerConfirmed && address === escrow.sellerAddress ? (
+                              <Button
+                                disabled={escrowLoading !== null}
+                                onClick={async () => {
+                                  setEscrowError(null);
+                                  setEscrowLoading('submit-delivery');
+                                  try {
+                                    const res = await getUnsignedTx.mutateAsync({
+                                      path: `/escrow/deal/${deal.id}/submit-delivery`,
+                                    });
+                                    const sig = await signAndSendTx(res.txBase64);
+                                    await submitDelivery.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                  } catch (err) {
+                                    setEscrowError(err instanceof Error ? err.message : 'Submit delivery failed');
+                                  } finally {
+                                    setEscrowLoading(null);
+                                  }
+                                }}
+                              >
+                                {escrowLoading === 'submit-delivery' ? 'Đang ký...' : 'Submit Delivery'}
+                              </Button>
+                            ) : null}
+                            {escrow.deliverySubmitted && address === escrow.buyerAddress ? (
+                              <Button
+                                disabled={escrowLoading !== null}
+                                onClick={async () => {
+                                  setEscrowError(null);
+                                  setEscrowLoading('release');
+                                  try {
+                                    const res = await getUnsignedTx.mutateAsync({
+                                      path: `/escrow/${escrow.id}/release`,
+                                    });
+                                    const sig = await signAndSendTx(res.txBase64);
+                                    await releaseEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                  } catch (err) {
+                                    setEscrowError(err instanceof Error ? err.message : 'Release failed');
+                                  } finally {
+                                    setEscrowLoading(null);
+                                  }
+                                }}
+                              >
+                                {escrowLoading === 'release' ? 'Đang ký & gửi...' : 'Release (rút tiền)'}
+                              </Button>
+                            ) : null}
+                            {address === escrow.buyerAddress && escrow.status === 'Funded' ? (
+                              <Button
+                                variant="secondary"
+                                disabled={escrowLoading !== null}
+                                onClick={async () => {
+                                  setEscrowError(null);
+                                  setEscrowLoading('refund');
+                                  try {
+                                    const res = await getUnsignedTx.mutateAsync({
+                                      path: `/escrow/${escrow.id}/refund`,
+                                    });
+                                    const sig = await signAndSendTx(res.txBase64);
+                                    await refundEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                  } catch (err) {
+                                    setEscrowError(err instanceof Error ? err.message : 'Refund failed');
+                                  } finally {
+                                    setEscrowLoading(null);
+                                  }
+                                }}
+                              >
+                                {escrowLoading === 'refund' ? 'Đang ký & gửi...' : 'Refund (hoàn tiền)'}
+                              </Button>
+                            ) : null}
+                            </>
+                          ) : null}
                       </div>
                     </>
                   ) : (

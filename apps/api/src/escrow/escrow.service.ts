@@ -143,6 +143,120 @@ export class EscrowService {
     return { escrow: updated, txSignature };
   }
 
+  // ── Confirm terms (both buyer + seller must confirm) ───────
+
+  async doConfirmTerms(dealId: string, walletAddress: string) {
+    const escrow = await this.prisma.escrow.findFirst({ where: { dealId } });
+    if (!escrow) throw new NotFoundException('Escrow not found for this deal');
+    if (escrow.status !== 'Funded') {
+      throw new BadRequestException(`Cannot confirm terms in status: ${escrow.status}`);
+    }
+
+    // Determine role
+    const isBuyer = walletAddress === escrow.buyerAddress;
+    const isSeller = walletAddress === escrow.sellerAddress;
+    if (!isBuyer && !isSeller) {
+      throw new BadRequestException('Wallet is not a participant in this escrow');
+    }
+    if (isBuyer && escrow.buyerConfirmed) {
+      throw new BadRequestException('Buyer already confirmed terms');
+    }
+    if (isSeller && escrow.sellerConfirmed) {
+      throw new BadRequestException('Seller already confirmed terms');
+    }
+
+    // Check on-chain state
+    if (!escrow.dealIdHash) {
+      throw new BadRequestException('No dealIdHash — escrow may not be on-chain yet');
+    }
+    const onChain = await this.solana.getEscrowState(escrow.dealIdHash);
+    if (!onChain) {
+      throw new BadRequestException('Escrow not found on-chain. Fund tx may not have completed yet.');
+    }
+
+    // If on-chain is already TermsConfirmed (2), skip on-chain tx — just update DB
+    if (onChain.state === 2) {
+      const updateData: Record<string, unknown> = {};
+      if (isBuyer) updateData.buyerConfirmed = true;
+      if (isSeller) updateData.sellerConfirmed = true;
+      const bothNow = (isBuyer ? true : escrow.buyerConfirmed) &&
+                      (isSeller ? true : escrow.sellerConfirmed);
+      if (bothNow) updateData.status = 'TermsConfirmed';
+      await this.prisma.escrow.update({ where: { id: escrow.id }, data: updateData });
+      this.emit(escrow.dealId, 'escrow_terms_confirmed', { escrowId: escrow.id, role: isBuyer ? 'buyer' : 'seller' });
+      return { escrowId: escrow.id, txBase64: null, role: isBuyer ? 'buyer' : 'seller', skipped: true };
+    }
+
+    // On-chain must be Deposited (1)
+    if (onChain.state !== 1) {
+      throw new BadRequestException(`On-chain state is ${onChain.state}, expected Deposited (1).`);
+    }
+
+    const signer = new PublicKey(walletAddress);
+    const termsHash = Buffer.alloc(32, 1);
+    const tx = await this.solana.buildConfirmTerms(escrow.dealIdHash!, termsHash, signer);
+    const serializedTx = tx.serialize({ requireAllSignatures: false }).toString('base64');
+
+    return { escrowId: escrow.id, txBase64: serializedTx, role: isBuyer ? 'buyer' : 'seller' };
+  }
+
+  async doConfirmTermsDone(id: string, walletAddress: string, txSignature: string) {
+    const escrow = await this.assertEscrow(id);
+    const isBuyer = walletAddress === escrow.buyerAddress;
+    const isSeller = walletAddress === escrow.sellerAddress;
+    if (!isBuyer && !isSeller) {
+      throw new BadRequestException('Wallet is not a participant');
+    }
+
+    const updateData: Record<string, unknown> = { txSignature };
+    if (isBuyer) updateData.buyerConfirmed = true;
+    if (isSeller) updateData.sellerConfirmed = true;
+
+    // If both confirmed, update status
+    const bothConfirmed = (isBuyer ? true : escrow.buyerConfirmed) &&
+                          (isSeller ? true : escrow.sellerConfirmed);
+    if (bothConfirmed) {
+      updateData.status = 'TermsConfirmed';
+    }
+
+    const updated = await this.prisma.escrow.update({ where: { id }, data: updateData });
+
+    const role = isBuyer ? 'buyer' : 'seller';
+    this.emit(escrow.dealId, 'escrow_terms_confirmed', {
+      escrowId: id, role, txSignature, bothConfirmed,
+    });
+    return { escrow: updated, txSignature, role, bothConfirmed };
+  }
+
+  // ── Submit delivery (seller only) ──────────────────────────
+
+  async doSubmitDelivery(dealId: string, walletAddress: string) {
+    const escrow = await this.prisma.escrow.findFirst({ where: { dealId } });
+    if (!escrow) throw new NotFoundException('Escrow not found for this deal');
+    if (escrow.status !== 'Funded' && escrow.status !== 'TermsConfirmed') {
+      throw new BadRequestException(`Cannot submit delivery in status: ${escrow.status}`);
+    }
+    if (walletAddress !== escrow.sellerAddress) {
+      throw new BadRequestException('Only seller can submit delivery');
+    }
+
+    const signer = new PublicKey(walletAddress);
+    const tx = await this.solana.buildSubmitDelivery(escrow.dealIdHash!, signer);
+    const serializedTx = tx.serialize({ requireAllSignatures: false }).toString('base64');
+
+    return { escrowId: escrow.id, txBase64: serializedTx };
+  }
+
+  async doSubmitDeliveryDone(id: string, txSignature: string) {
+    const escrow = await this.assertEscrow(id);
+    const updated = await this.prisma.escrow.update({
+      where: { id },
+      data: { status: 'DeliverySubmitted', deliverySubmitted: true, txSignature },
+    });
+    this.emit(escrow.dealId, 'escrow_delivery_submitted', { escrowId: id, txSignature });
+    return { escrow: updated, txSignature };
+  }
+
   /** Build unsigned refund tx for buyer to sign. */
   async refundEscrow(id: string) {
     const escrow = await this.assertEscrow(id);

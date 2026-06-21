@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EscrowClient, deriveVaultPda, ESCROW_PROGRAM_ID, type SolanaCluster, type EscrowAccountData } from '@trustroom/solana';
+import { EscrowClient, ESCROW_PROGRAM_ID, type SolanaCluster, type EscrowAccountData } from '@trustroom/solana';
 import { Connection, PublicKey } from '@solana/web3.js';
 
 /**
@@ -65,6 +65,41 @@ export class SolanaService {
   ): Promise<import('@solana/web3.js').Transaction> {
     const hash = Buffer.from(dealIdHash, 'hex');
     return this.client.buildRefundTx(hash, buyer);
+  }
+
+  /** Build an unsigned confirm_terms transaction. */
+  async buildConfirmTerms(
+    dealIdHash: string,
+    termsHash: Buffer,
+    authority: PublicKey,
+  ): Promise<import('@solana/web3.js').Transaction> {
+    const hash = Buffer.from(dealIdHash, 'hex');
+    const ix = this.client.buildConfirmTermsIx(hash, termsHash, authority);
+    const tx = new (await import('@solana/web3.js')).Transaction();
+    tx.add(ix);
+    const conn = this.client.getConnection();
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.lastValidBlockHeight = lastValidBlockHeight;
+    tx.feePayer = authority;
+    return tx;
+  }
+
+  /** Build an unsigned submit_delivery transaction. */
+  async buildSubmitDelivery(
+    dealIdHash: string,
+    authority: PublicKey,
+  ): Promise<import('@solana/web3.js').Transaction> {
+    const hash = Buffer.from(dealIdHash, 'hex');
+    const ix = this.client.buildSubmitDeliveryIx(hash, authority);
+    const tx = new (await import('@solana/web3.js')).Transaction();
+    tx.add(ix);
+    const conn = this.client.getConnection();
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.lastValidBlockHeight = lastValidBlockHeight;
+    tx.feePayer = authority;
+    return tx;
   }
 
   getConnection(): Connection {

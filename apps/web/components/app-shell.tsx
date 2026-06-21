@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Avatar, Badge, Button } from '@trustroom/ui';
@@ -27,6 +28,18 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const { address, walletKind, logout, status, connect } = useAuth();
+  const [copied, setCopied] = useState(false);
+
+  async function copyAddress() {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.16),_transparent_35%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)] text-slate-100">
@@ -62,10 +75,21 @@ export function AppShell({
                 <Badge variant={walletKind === 'demo' ? 'warning' : 'info'}>
                   {walletKind === 'demo' ? 'Demo wallet' : 'Phantom'}
                 </Badge>
-                <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 sm:flex">
+                <button
+                  onClick={copyAddress}
+                  title={copied ? 'Đã copy!' : `Copy full address: ${address}`}
+                  className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 transition hover:bg-white/10 cursor-pointer sm:flex"
+                >
                   <Avatar size="sm" address={address} showLabel={false} />
-                  <span className="text-sm text-slate-200">{shortAddress(address, 5, 5)}</span>
-                </div>
+                  <span className="text-sm text-slate-200">
+                    {shortAddress(address, 5, 5)}
+                  </span>
+                  {copied ? (
+                    <span className="text-xs text-emerald-400">✓ copied</span>
+                  ) : (
+                    <span className="text-xs text-slate-500">copy</span>
+                  )}
+                </button>
                 <Button variant="ghost" onClick={logout}>
                   Đăng xuất
                 </Button>

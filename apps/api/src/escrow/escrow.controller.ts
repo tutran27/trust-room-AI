@@ -30,6 +30,30 @@ export class EscrowController {
     return this.escrowService.confirmFunded(id, txSignature);
   }
 
+  @Post('deal/:dealId/confirm-terms')
+  async confirmTerms(@Param('dealId') dealId: string, @Request() req: any) {
+    return this.escrowService.doConfirmTerms(dealId, req.user.wallet);
+  }
+
+  @Post(':id/confirm-terms-done')
+  async confirmTermsDone(
+    @Param('id') id: string,
+    @Body('txSignature') txSignature: string,
+    @Request() req: any,
+  ) {
+    return this.escrowService.doConfirmTermsDone(id, req.user.wallet, txSignature);
+  }
+
+  @Post('deal/:dealId/submit-delivery')
+  async submitDelivery(@Param('dealId') dealId: string, @Request() req: any) {
+    return this.escrowService.doSubmitDelivery(dealId, req.user.wallet);
+  }
+
+  @Post(':id/submit-delivery-done')
+  async submitDeliveryDone(@Param('id') id: string, @Body('txSignature') txSignature: string) {
+    return this.escrowService.doSubmitDeliveryDone(id, txSignature);
+  }
+
   @Post(':id/release')
   async release(@Param('id') id: string) {
     return this.escrowService.releaseEscrow(id);

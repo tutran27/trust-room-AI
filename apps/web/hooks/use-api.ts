@@ -167,6 +167,44 @@ export function useGetUnsignedTx() {
   });
 }
 
+export function useConfirmTerms() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ escrowId, txSignature }: { escrowId: string; txSignature: string }) =>
+      apiFetch<EscrowActionResult>(`/escrow/${escrowId}/confirm-terms-done`, {
+        method: 'POST',
+        body: { txSignature },
+      }),
+    onSuccess: (res) => qc.invalidateQueries({ queryKey: ['escrow', res.escrow.dealId] }),
+  });
+}
+
+export function useSellerAcceptDeal(dealId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { expectedVersion: number }) =>
+      apiFetch<Deal>(`/deals/${dealId}/actions`, {
+        method: 'POST',
+        body: { action: 'verify-wallets', expectedVersion: input.expectedVersion },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deal', dealId] });
+    },
+  });
+}
+
+export function useSubmitDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ escrowId, txSignature }: { escrowId: string; txSignature: string }) =>
+      apiFetch<EscrowActionResult>(`/escrow/${escrowId}/submit-delivery-done`, {
+        method: 'POST',
+        body: { txSignature },
+      }),
+    onSuccess: (res) => qc.invalidateQueries({ queryKey: ['escrow', res.escrow.dealId] }),
+  });
+}
+
 // ── Disputes & evidence ────────────────────────────────
 export function useDisputes() {
   return useQuery({

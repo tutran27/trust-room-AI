@@ -143,6 +143,8 @@ model DealEvent {
 enum EscrowStatus {
   Created
   Funded
+  TermsConfirmed
+  DeliverySubmitted
   Released
   Refunded
   Disputed
@@ -158,6 +160,9 @@ model Escrow {
   dealIdHash    String?
   status        EscrowStatus @default(Created)
   txSignature   String?
+  buyerConfirmed  Boolean    @default(false)
+  sellerConfirmed Boolean    @default(false)
+  deliverySubmitted Boolean @default(false)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

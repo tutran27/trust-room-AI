@@ -48,8 +48,11 @@ export interface Escrow {
   sellerAddress: string;
   tokenMint: string;
   dealIdHash: string | null;
-  status: 'Created' | 'Funded' | 'Released' | 'Refunded' | 'Disputed';
+  status: 'Created' | 'Funded' | 'TermsConfirmed' | 'DeliverySubmitted' | 'Released' | 'Refunded' | 'Disputed';
   txSignature: string | null;
+  buyerConfirmed: boolean;
+  sellerConfirmed: boolean;
+  deliverySubmitted: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -13,7 +13,17 @@ async function bootstrap(): Promise<void> {
     .filter(Boolean);
 
   app.enableCors({
-    origin: corsOrigins,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, ngrok, etc.)
+      if (!origin) return callback(null, true);
+      // Allow all localhost
+      if (origin.startsWith('http://localhost')) return callback(null, true);
+      // Allow all ngrok domains
+      if (origin.includes('.ngrok-free.app') || origin.includes('.ngrok.io')) return callback(null, true);
+      // Allow configured origins
+      if (corsOrigins.includes(origin)) return callback(null, true);
+      callback(null, true);
+    },
     credentials: false,
   });
   app.setGlobalPrefix('api');
