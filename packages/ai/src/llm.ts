@@ -140,11 +140,29 @@ export class LLMClient {
 
 let defaultClient: LLMClient | null = null;
 
+/**
+ * Return a shared default client. We only cache a CONFIGURED client — if no API key
+ * is resolvable yet (e.g. the user hasn't added GROQ_API_KEY to .env), we return a
+ * fresh unconfigured client each call and never memoize it. That way, once the key
+ * appears in the environment, the very next call builds a real client without any
+ * code change or stale-singleton problem. An explicit `config` always builds fresh.
+ */
 export function getLLMClient(config?: LLMConfig): LLMClient {
-  if (!defaultClient || config) {
-    defaultClient = new LLMClient(config);
+  if (config) {
+    return new LLMClient(config);
   }
-  return defaultClient;
+  // Reuse the cached client only when it is actually configured.
+  if (defaultClient?.isConfigured()) {
+    return defaultClient;
+  }
+  const client = new LLMClient();
+  if (client.isConfigured()) {
+    defaultClient = client;
+  } else {
+    // Don't pin an unconfigured client — the key may be added to the env later.
+    defaultClient = null;
+  }
+  return client;
 }
 
 export function createLLMClient(config?: LLMConfig): LLMClient {

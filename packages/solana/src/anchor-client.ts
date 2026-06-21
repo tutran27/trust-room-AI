@@ -21,6 +21,14 @@ import { getConnection, deriveEscrowPda, type SolanaCluster } from './index';
 // ── Program ID (must match declare_id! in lib.rs) ──────────────────────────
 export const ESCROW_PROGRAM_ID = new PublicKey('3DyccqgiVSUupDEfgvME8rduMHAgJdLxqhGEdPuhbjR7');
 
+// Resolved from the ESCROW_PROGRAM_ID env at call time, falling back to the
+// deployed default above. Constructed on demand (not at module load) so importing
+// this module never throws when the env var is unset.
+export function getEscrowProgramId(): PublicKey {
+  const id = process.env.ESCROW_PROGRAM_ID;
+  return id ? new PublicKey(id) : ESCROW_PROGRAM_ID;
+}
+
 // ── Escrow state enum (mirrors on-chain enum) ───────────────────────────────
 export enum EscrowState {
   Initialized = 0,
@@ -74,7 +82,7 @@ export class EscrowClient {
     programId?: PublicKey,
   ) {
     this.connection = getConnection(cluster, rpcUrl);
-    this.programId = programId ?? ESCROW_PROGRAM_ID;
+    this.programId = programId ?? getEscrowProgramId();
   }
 
   /** Derive the escrow PDA for a given deal ID hash. */

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EscrowClient, ESCROW_PROGRAM_ID, type SolanaCluster, type EscrowAccountData } from '@trustroom/solana';
+import { EscrowClient, getEscrowProgramId, type SolanaCluster, type EscrowAccountData } from '@trustroom/solana';
 import { Connection, PublicKey } from '@solana/web3.js';
 
 /**
@@ -14,9 +14,7 @@ export class SolanaService {
   constructor() {
     const cluster = (process.env.SOLANA_CLUSTER as SolanaCluster) || 'devnet';
     const rpcUrl = process.env.SOLANA_RPC_URL;
-    const programId = process.env.ESCROW_PROGRAM_ID
-      ? new PublicKey(process.env.ESCROW_PROGRAM_ID)
-      : ESCROW_PROGRAM_ID;
+    const programId = getEscrowProgramId();
 
     this.client = new EscrowClient(cluster, rpcUrl, programId);
     this.logger.log(`SolanaService initialized: cluster=${cluster}, program=${programId.toBase58()}`);

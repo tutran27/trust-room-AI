@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { EscrowService } from './escrow.service';
 import { CreateEscrowDto } from './dto/create-escrow.dto';
+import { RaiseDisputeDto } from './dto/raise-dispute.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('escrow')
@@ -72,6 +73,15 @@ export class EscrowController {
   @Post(':id/confirm-refunded')
   async confirmRefunded(@Param('id') id: string, @Body('txSignature') txSignature: string) {
     return this.escrowService.confirmRefunded(id, txSignature);
+  }
+
+  @Post(':id/raise-dispute')
+  async raiseDispute(
+    @Param('id') id: string,
+    @Body() dto: RaiseDisputeDto,
+    @Request() req: any,
+  ) {
+    return this.escrowService.raiseDispute(id, req.user.wallet, dto.evidenceHash);
   }
 
   @Get('deal/:dealId')

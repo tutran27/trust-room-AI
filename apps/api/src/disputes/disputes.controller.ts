@@ -36,7 +36,11 @@ export class DisputesController {
   }
 
   @Post(':id/resolve')
-  resolve(@Param('id') disputeId: string, @Body() dto: ResolveDisputeDto) {
-    return this.disputesService.resolveDispute(disputeId, dto);
+  resolve(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') disputeId: string,
+    @Body() dto: ResolveDisputeDto,
+  ) {
+    return this.disputesService.resolveDispute(req.user.wallet, disputeId, dto);
   }
 }

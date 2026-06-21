@@ -154,43 +154,6 @@ function getTranscriptRiskSummary(
   };
 }
 
-function getRiskEvidenceDetails(evidence: unknown) {
-  if (!evidence || typeof evidence !== 'object') {
-    return { matchedKeyword: null as string | null, score: null as number | null };
-  }
-
-  const record = evidence as { matchedKeyword?: unknown; score?: unknown };
-  return {
-    matchedKeyword:
-      typeof record.matchedKeyword === 'string' && record.matchedKeyword.trim()
-        ? record.matchedKeyword.trim()
-        : null,
-    score: typeof record.score === 'number' && Number.isFinite(record.score) ? record.score : null,
-  };
-}
-
-function buildRiskFeedMessage(
-  event: { description: string; evidence: unknown; transcriptId: string | null },
-  transcriptContent: string | null,
-) {
-  const evidence = getRiskEvidenceDetails(event.evidence);
-  const parts: string[] = [event.description];
-
-  if (evidence.matchedKeyword) {
-    parts.push(`Từ khóa nghi ngờ: "${evidence.matchedKeyword}".`);
-  }
-
-  if (transcriptContent) {
-    parts.push(`Đoạn hội thoại: "${transcriptContent}".`);
-  }
-
-  if (evidence.score !== null) {
-    parts.push(`Điểm rủi ro: ${evidence.score}.`);
-  }
-
-  return parts.join(' ');
-}
-
 export default function MeetingDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -271,10 +234,6 @@ export default function MeetingDetailPage() {
       }),
     [riskEvents],
   );
-  const transcriptById = useMemo(
-    () => new Map(transcripts.map((transcript) => [transcript.id, transcript])),
-    [transcripts],
-  );
   const lastTranscript = transcripts.length ? transcripts[transcripts.length - 1] : null;
   const isDemoTranscriptMode = sttState?.mode === 'demo_manual' || !sttState;
   const isRealtimeRunning = ['running', 'fallback_asr_only'].includes(sttState?.status ?? '');
@@ -287,7 +246,7 @@ export default function MeetingDetailPage() {
   const startSttErrorMessage =
     startSttMutation.error instanceof Error
       ? startSttMutation.error.message
-      : 'Lá»—i khÃ´ng xÃ¡c Ä‘á»‹nh.';
+      : 'Lỗi không xác định.';
   const startRealtimeDisabled =
     startSttMutation.isPending || !meetingId || isRealtimeRunning;
   const startRealtimeDisabledReason = startSttMutation.isPending
@@ -603,9 +562,6 @@ export default function MeetingDetailPage() {
                       </div>
                       <div>
                         <CardTitle className="text-2xl">Call room</CardTitle>
-                        <CardDescription>
-                          Video được ưu tiên diện tích lớn hơn, các khối phụ được dồn sang cột phải để màn họp thoáng và dễ nhìn.
-                        </CardDescription>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-3">
@@ -870,24 +826,17 @@ export default function MeetingDetailPage() {
                       <Skeleton className="h-24 rounded-2xl" />
                     </>
                   ) : topRiskEvents.length ? (
-                    topRiskEvents.slice(0, 6).map((event) => {
-                      const linkedTranscript = event.transcriptId
-                        ? transcriptById.get(event.transcriptId)
-                        : null;
-                      const riskMessage = buildRiskFeedMessage(
-                        event,
-                        linkedTranscript?.content ?? null,
-                      );
-
-                      return (
-                        <div
-                          key={event.id}
-                          className="rounded-[24px] border border-red-500/15 bg-[linear-gradient(180deg,rgba(68,10,12,0.35),rgba(15,6,8,0.7))] p-4"
-                        >
-                          <div className="mb-2 flex flex-wrap items-center gap-2">                            <Badge variant={riskVariant(event.severity)}>{event.severity}</Badge>                          </div>                          <p className="text-sm leading-6 text-slate-100">{riskMessage}</p>
+                    topRiskEvents.slice(0, 6).map((event) => (
+                      <div
+                        key={event.id}
+                        className="rounded-[24px] border border-red-500/15 bg-[linear-gradient(180deg,rgba(68,10,12,0.35),rgba(15,6,8,0.7))] p-4"
+                      >
+                        <div className="mb-2">
+                          <Badge variant={riskVariant(event.severity)}>{event.severity}</Badge>
                         </div>
-                      );
-                    })
+                        <p className="text-sm leading-6 text-slate-100">{event.description}</p>
+                      </div>
+                    ))
                   ) : null}
                 </CardContent>
                 </Card>
@@ -896,45 +845,33 @@ export default function MeetingDetailPage() {
               
 
               <Card className="border-white/10 bg-slate-950/70">
-                <CardHeader className="pb-4">                  <CardTitle>Invite</CardTitle>                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Input
-                    value={inviteWallet}
-                    onChange={(event) => setInviteWallet(event.target.value)}
-                    placeholder="Wallet được mời, để trống nếu muốn link mở"
-                  />
-                  <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr_0.7fr]">
+                <CardHeader className="pb-4">
+                  <CardTitle>Invite</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <Input
-                      value={inviteRole}
-                      onChange={(event) =>
-                        setInviteRole(
-                          event.target.value as 'buyer' | 'seller' | 'arbiter' | 'guest',
-                        )
+                      value={inviteWallet}
+                      onChange={(event) => setInviteWallet(event.target.value)}
+                      placeholder="Wallet được mời (để trống = link mở)"
+                    />
+                    <Button
+                      onClick={() =>
+                        inviteMutation.mutate({
+                          walletAddress: inviteWallet || undefined,
+                          role: inviteRole,
+                          maxUses: Number(inviteUses) || 1,
+                          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                        })
                       }
-                      placeholder="guest"
-                    />
-                    <Input
-                      value={inviteUses}
-                      onChange={(event) => setInviteUses(event.target.value)}
-                      placeholder="Số lần dùng"
-                    />
+                      disabled={inviteMutation.isPending}
+                    >
+                      Tạo invite
+                    </Button>
                   </div>
-                  <Button
-                    onClick={() =>
-                      inviteMutation.mutate({
-                        walletAddress: inviteWallet || undefined,
-                        role: inviteRole,
-                        maxUses: Number(inviteUses) || 1,
-                        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-                      })
-                    }
-                    disabled={inviteMutation.isPending}
-                  >
-                    Tạo invite
-                  </Button>
 
                   {meeting.invites?.length ? (
-                    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                    <div className="space-y-2">
                       {meeting.invites.slice(0, 3).map((invite) => {
                         const link = `${
                           typeof window !== 'undefined' ? window.location.origin : ''
@@ -942,8 +879,7 @@ export default function MeetingDetailPage() {
 
                         return (
                           <div key={invite.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
-                            <div className="mb-2 flex flex-wrap items-center gap-2">
-                              <Badge variant="muted">{invite.role}</Badge>
+                            <div className="mb-1 flex items-center gap-2">
                               <Badge variant={invite.status === 'Accepted' ? 'success' : 'info'}>
                                 {invite.status}
                               </Badge>

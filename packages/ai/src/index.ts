@@ -59,12 +59,21 @@ export {
 export {
   runRules,
   aggregateRisk,
+  aggregateFullRisk,
+  repetitionPenalty,
   analyzeTranscript,
   normalize,
   type RuleHit,
   type RiskAssessment,
+  type FullRiskInput,
+  type FullRiskAssessment,
   type TranscriptAnalysis,
 } from './scam-guard/detect.js';
+export {
+  isValidSolanaAddress,
+  extractSolanaAddresses,
+  findExternalAddresses,
+} from './scam-guard/wallet.js';
 export { SCAM_RULES, type ScamRule } from './scam-guard/rules.js';
 
 // Re-exported shared helper for convenience

@@ -14,6 +14,7 @@ import {
   encodeCursor,
   getEventForAction,
   getTargetStatusForAction,
+  hashDealTerms,
 } from './deals.utils';
 import { WebsocketGateway } from '../websocket/websocket.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -288,6 +289,20 @@ export class DealsService {
       );
     }
 
+    // Anchor the agreed terms when both parties confirm: store a deterministic
+    // hash of the load-bearing deal fields so it can be signed / compared later.
+    const termsHash =
+      targetStatus === DealStatus.TermsConfirmed
+        ? hashDealTerms({
+            title: current.title,
+            description: current.description,
+            type: current.type,
+            amount: current.amount,
+            token: current.token,
+            deadline: current.deadline,
+          })
+        : null;
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.deal.updateMany({
         where: {
@@ -298,6 +313,7 @@ export class DealsService {
         data: {
           status: targetStatus,
           version: { increment: 1 },
+          ...(termsHash ? { termsHash } : {}),
         },
       });
 
@@ -345,6 +361,7 @@ export class DealsService {
     deal: {
       id: string;
       status: DealStatus;
+      amount: Prisma.Decimal;
       participants: Array<{ walletAddress: string; role: ParticipantRole }>;
     },
     from: DealStatus,
@@ -381,7 +398,13 @@ export class DealsService {
     // Reputation: completed on Released, disputed on Disputed.
     try {
       if (to === DealStatus.Released) {
+        // Credit the deal's amount to every participant's lifetime volume BEFORE
+        // recalculating, so the volume bonus reflects this freshly-released deal.
+        const volume = Number(deal.amount);
         for (const p of deal.participants) {
+          if (Number.isFinite(volume) && volume > 0) {
+            await this.reputation.addVolume(p.walletAddress, volume);
+          }
           await this.reputation.incrementCompletedDeals(p.walletAddress, true);
           await this.reputation.recalculateScore(p.walletAddress);
         }
@@ -407,6 +430,82 @@ export class DealsService {
       { action: 'cancel', expectedVersion, reason },
       actorWallet,
     );
+  }
+
+  /**
+   * Settle a disputed deal into a terminal resolved state. Called by the dispute
+   * workflow once a resolution is chosen. WHY this is separate from `transition`:
+   * the Disputed → Resolved* edges are not user actions in the DealAction map and
+   * must be driven only by dispute resolution, not by the buyer alone. RBAC is the
+   * caller's responsibility (dispute resolver checks participant); here we still
+   * require the actor to be a participant and enforce `canTransition`.
+   * Does NOT touch on-chain escrow — that is handled elsewhere.
+   */
+  async settleDisputedDeal(
+    dealId: string,
+    targetStatus: DealStatus,
+    actorWallet: string,
+  ) {
+    const current = await this.loadAuthorizedDeal(dealId, actorWallet);
+
+    if (current.status !== DealStatus.Disputed) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'DEAL_NOT_DISPUTED',
+        `Cannot settle a deal in status ${current.status}; expected Disputed.`,
+      );
+    }
+
+    if (!canTransition(current.status, targetStatus)) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'DEAL_TRANSITION_INVALID',
+        `Cannot settle a disputed deal into ${targetStatus}.`,
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.deal.updateMany({
+        where: {
+          id: dealId,
+          version: current.version,
+          status: DealStatus.Disputed,
+        },
+        data: {
+          status: targetStatus,
+          version: { increment: 1 },
+        },
+      });
+
+      if (result.count !== 1) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          'DEAL_VERSION_CONFLICT',
+          'Deal version conflict.',
+        );
+      }
+
+      await tx.dealEvent.create({
+        data: {
+          dealId,
+          actorWallet,
+          type: DealEvent.DisputeResolved,
+          metadata: { from: current.status, to: targetStatus },
+        },
+      });
+
+      return tx.deal.findUniqueOrThrow({
+        where: { id: dealId },
+        include: {
+          participants: true,
+          events: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+    });
+
+    const serialized = this.serializeDeal(updated);
+    void this.afterTransition(updated, current.status, targetStatus);
+    return serialized;
   }
 
   private async loadAuthorizedDeal(dealId: string, actorWallet: string) {

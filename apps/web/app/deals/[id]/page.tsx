@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -19,6 +19,8 @@ import {
 import { AppShell } from '../../../components/app-shell';
 import { AuthGate } from '../../../components/auth-gate';
 import { StatusBadge } from '../../../components/status-badge';
+import { RiskDashboard } from '../../../components/risk-dashboard';
+import { GuardianModal } from '../../../components/guardian-modal';
 import {
   useAddEvidence,
   useConfirmEscrowCreated,
@@ -65,6 +67,37 @@ function riskVariant(level?: string) {
   return 'muted' as const;
 }
 
+/** Deal states where releasing escrow is safe (delivery proof exists). */
+const SAFE_TO_RELEASE_STATES = new Set(['DeliverySubmitted', 'ReadyToRelease']);
+
+/** Solana Explorer URL for a transaction signature (devnet cluster). */
+function explorerTxUrl(signature: string): string {
+  return `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
+}
+
+/** A synthetic (off-chain simulated) signature has the SIM prefix. */
+function isOnChainSignature(signature: string | null | undefined): boolean {
+  return Boolean(signature && !signature.startsWith('SIM'));
+}
+
+/**
+ * Scripted red-team scam scenario for one-click demo. Each line escalates and is
+ * crafted to fire the deterministic rule layer (no LLM dependency), so the demo is
+ * reproducible without network. The repeated off-platform/early-release lines
+ * trigger the repetition penalty.
+ */
+const DEMO_SCRIPT: string[] = [
+  'Chào bạn, mình muốn mua nhanh, deal này ổn áp đấy',
+  'Hay là mình chuyển qua telegram nói chuyện cho tiện nhé',
+  'Qua telegram đi, ở đây bất tiện quá',
+  'Bạn release trước đi rồi mình gửi file sau',
+  'Cứ release trước đi, mình uy tín mà',
+  'Mình gửi ví này nhé: 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+  'Mình đã gửi bill chuyển khoản rồi, cứ release đi',
+  'Cho mình xin seed phrase để verify ví của bạn',
+];
+
+
 export default function DealDetailPage() {
   const params = useParams<{ id: string }>();
   const dealId = params?.id ?? null;
@@ -102,18 +135,81 @@ export default function DealDetailPage() {
   const confirmTerms = useConfirmTerms();
   const submitDelivery = useSubmitDelivery();
 
+  // AI Guardian state: track which risk event the user has acknowledged so a fired
+  // high/critical alert gates dangerous buttons until explicitly dismissed.
+  const [ackedTimestamp, setAckedTimestamp] = useState<string | null>(null);
+  const [guardianOpen, setGuardianOpen] = useState(false);
+  const [evidenceLogged, setEvidenceLogged] = useState<string | null>(null);
+  // Demo Mode replay bookkeeping.
+  const [demoRunning, setDemoRunning] = useState(false);
+  const demoTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   const activeDisputeId = deal?.status === 'Disputed' ? undefined : undefined;
   const currentDispute = useDispute(activeDisputeId ?? null);
   const addEvidence = useAddEvidence(currentDispute.data?.id ?? '');
 
-  const chatRiskSummary = useMemo(() => live.riskEvents[0] ?? null, [live.riskEvents]);
+  const latestRisk = live.riskEvents[0] ?? null;
+  // A high/critical risk that the user hasn't acknowledged yet locks dangerous actions.
+  const activeThreat =
+    latestRisk && (latestRisk.level === 'high' || latestRisk.level === 'critical')
+      ? latestRisk
+      : null;
+  const riskLocked = Boolean(activeThreat && activeThreat.timestamp !== ackedTimestamp);
+
+  // Auto-open the Guardian modal the moment a new unacknowledged threat arrives.
+  useEffect(() => {
+    if (riskLocked) setGuardianOpen(true);
+  }, [riskLocked]);
+
+  // Clean up any pending demo timers on unmount.
+  useEffect(() => () => demoTimers.current.forEach(clearTimeout), []);
+
+  const acknowledgeThreat = () => {
+    if (activeThreat) setAckedTimestamp(activeThreat.timestamp);
+    setGuardianOpen(false);
+  };
+
+  // Snapshot the active threat into the deal transcript timeline (persisted as a
+  // transcript.chunk event server-side). Keeps Evidence Vault wired into the same
+  // real pipeline rather than a demo-only branch.
+  const logEvidenceFromThreat = () => {
+    if (!activeThreat) return;
+    live.sendChatMessage(
+      `[EVIDENCE] Scam Guard ${activeThreat.level.toUpperCase()} (${activeThreat.score}/100): ` +
+        `${activeThreat.reasons.join('; ')} — trigger: "${activeThreat.triggerText}"`,
+    );
+    setEvidenceLogged(activeThreat.timestamp);
+  };
+
+  const runDemoScenario = () => {
+    if (demoRunning) return;
+    setDemoRunning(true);
+    demoTimers.current.forEach(clearTimeout);
+    demoTimers.current = [];
+    DEMO_SCRIPT.forEach((line, index) => {
+      const t = setTimeout(() => {
+        live.sendChatMessage(line);
+        if (index === DEMO_SCRIPT.length - 1) setDemoRunning(false);
+      }, index * 2500);
+      demoTimers.current.push(t);
+    });
+  };
+
   const availableActions = deal ? DEAL_ACTION_OPTIONS[deal.status] ?? [] : [];
+  const releaseBlockedByState = deal ? !SAFE_TO_RELEASE_STATES.has(deal.status) : false;
 
   return (
     <AuthGate>
+      <GuardianModal
+        event={activeThreat}
+        open={guardianOpen && riskLocked}
+        onAcknowledge={acknowledgeThreat}
+        onLogEvidence={logEvidenceFromThreat}
+        evidenceLogged={Boolean(activeThreat && evidenceLogged === activeThreat.timestamp)}
+      />
       <AppShell
         title={deal?.title ?? 'Deal room'}
-        subtitle="?i?u ph?i deal, meeting, escrow v? dispute trong m?t m?n h?nh g?n h?n."
+        subtitle="Điều phối deal, meeting, escrow và dispute trong một màn hình gọn hơn."
         contentClassName="max-w-[1920px] px-3 md:px-5 2xl:px-8"
         actions={
           <>
@@ -169,9 +265,6 @@ export default function DealDetailPage() {
                       </div>
                       <div>
                         <CardTitle className="text-2xl">Deal overview</CardTitle>
-                        <CardDescription>
-                          Tập trung lại thông tin cốt lõi của deal và các hành động lifecycle quan trọng, tránh dàn trải nhiều khối nhỏ.
-                        </CardDescription>
                       </div>
                     </div>
                     <div className="grid gap-2 text-sm text-slate-300 xl:text-right">
@@ -187,19 +280,15 @@ export default function DealDetailPage() {
                 </CardHeader>
                 <CardContent className="grid gap-5 pt-6 xl:grid-cols-[1.2fr_0.8fr]">
                   <div className="space-y-4">
-                    <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-4">
+                    <div>
                       <p className="mb-2 text-sm font-medium text-slate-100">Mô tả deal</p>
-                      <p className="text-sm leading-6 text-slate-300">
-                        {deal.description || 'Chưa có mô tả.'}
-                      </p>
+                      <Textarea
+                        rows={4}
+                        value={editDescription || deal.description || ''}
+                        onChange={(event) => setEditDescription(event.target.value)}
+                        placeholder="Chưa có mô tả. Nhập để cập nhật."
+                      />
                     </div>
-
-                    <Textarea
-                      rows={4}
-                      value={editDescription || deal.description || ''}
-                      onChange={(event) => setEditDescription(event.target.value)}
-                      placeholder="Cập nhật mô tả deal"
-                    />
 
                     <div className="flex flex-wrap gap-3">
                       <Button
@@ -265,9 +354,9 @@ export default function DealDetailPage() {
                     </div>
                   ) : (
                     <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm font-medium text-slate-100">??i t?c s?n s?ng</p>
+                      <p className="text-sm font-medium text-slate-100">Đối tác sẵn sàng</p>
                       <p className="mt-2 text-sm text-slate-300">
-                        Seller hiện tại là {shortAddress(deal.sellerWallet, 5, 5)}.
+                        Seller: {shortAddress(deal.sellerWallet, 5, 5)}.
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
                         v{deal.version} • deadline {formatDateTime(deal.deadline)}
@@ -287,8 +376,8 @@ export default function DealDetailPage() {
                       </CardDescription>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={chatRiskSummary ? riskVariant(chatRiskSummary.level) : 'muted'}>
-                        {chatRiskSummary ? `risk ${chatRiskSummary.level}` : 'no active alert'}
+                      <Badge variant={latestRisk ? riskVariant(latestRisk.level) : 'muted'}>
+                        {latestRisk ? `risk ${latestRisk.level}` : 'chưa có cảnh báo'}
                       </Badge>
                       <Badge variant="muted">{live.messages.length} messages</Badge>
                       <Badge variant="muted">{live.updates.length} updates</Badge>
@@ -383,46 +472,20 @@ export default function DealDetailPage() {
                             >
                               Scan nhanh
                             </Button>
+                            <Button
+                              variant="danger"
+                              onClick={runDemoScenario}
+                              disabled={demoRunning}
+                              title="Phát một chuỗi tin nhắn lừa đảo leo thang qua đúng pipeline Scam Guard thật"
+                            >
+                              {demoRunning ? 'Đang phát kịch bản…' : '▶ Phát kịch bản lừa đảo'}
+                            </Button>
                           </div>
                         </div>
                       </div>
                     </div>
 
                     <div className="space-y-4">
-                      <div className="rounded-[28px] border border-red-500/15 bg-[linear-gradient(180deg,rgba(68,10,12,0.35),rgba(15,6,8,0.7))] p-4">
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium text-slate-100">AI monitor</p>
-                            <p className="text-xs text-slate-400">
-                              Cảnh báo đang active sẽ được đẩy lên đầu để phản ứng nhanh.
-                            </p>
-                          </div>
-                          <Badge variant={chatRiskSummary ? riskVariant(chatRiskSummary.level) : 'muted'}>
-                            {chatRiskSummary?.level ?? 'idle'}
-                          </Badge>
-                        </div>
-
-                        {chatRiskSummary ? (
-                          <div className="space-y-3">
-                            <p className="text-sm leading-6 text-slate-100">
-                              {chatRiskSummary.reasons.join(' • ')}
-                            </p>
-                            <div className="rounded-2xl border border-red-500/15 bg-black/15 px-3 py-2">
-                              <p className="text-xs uppercase tracking-[0.16em] text-red-300/80">
-                                Trigger text
-                              </p>
-                              <p className="mt-1 text-sm text-slate-100">
-                                {chatRiskSummary.triggerText}
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <Alert title="Chưa có cảnh báo">
-                            Realtime Scam Guard sẽ đẩy event vào đây khi có tín hiệu đáng ngờ.
-                          </Alert>
-                        )}
-                      </div>
-
                       <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-4">
                         <div className="mb-4 flex items-center justify-between gap-3">
                           <div>
@@ -456,6 +519,8 @@ export default function DealDetailPage() {
                           <p className="text-sm text-slate-400">Chưa có cập nhật realtime.</p>
                         )}
                       </div>
+
+                      <RiskDashboard events={live.riskEvents} />
                     </div>
                   </div>
                 </CardContent>
@@ -507,7 +572,7 @@ export default function DealDetailPage() {
                       <div className="flex flex-wrap gap-3">
                         {escrow.status === 'Created' && address === escrow.buyerAddress ? (
                           <Button
-                            disabled={escrowLoading !== null}
+                            disabled={escrowLoading !== null || riskLocked}
                             onClick={async () => {
                               setEscrowError(null);
                               setEscrowLoading('fund');
@@ -608,7 +673,12 @@ export default function DealDetailPage() {
                             ) : null}
                             {escrow.deliverySubmitted && address === escrow.buyerAddress ? (
                               <Button
-                                disabled={escrowLoading !== null}
+                                disabled={escrowLoading !== null || riskLocked || releaseBlockedByState}
+                                title={
+                                  releaseBlockedByState
+                                    ? 'Release bị khóa: deal chưa tới trạng thái giao hàng (DeliverySubmitted/ReadyToRelease)'
+                                    : undefined
+                                }
                                 onClick={async () => {
                                   setEscrowError(null);
                                   setEscrowLoading('release');
@@ -631,7 +701,7 @@ export default function DealDetailPage() {
                             {address === escrow.buyerAddress && escrow.status === 'Funded' ? (
                               <Button
                                 variant="secondary"
-                                disabled={escrowLoading !== null}
+                                disabled={escrowLoading !== null || riskLocked}
                                 onClick={async () => {
                                   setEscrowError(null);
                                   setEscrowLoading('refund');
@@ -654,6 +724,31 @@ export default function DealDetailPage() {
                             </>
                           ) : null}
                       </div>
+                      {riskLocked ? (
+                        <Alert variant="danger" title="AI Guardian đang khóa giao dịch">
+                          Scam Guard phát hiện rủi ro {activeThreat?.level}. Các nút Fund / Release / Refund bị
+                          tạm khóa cho tới khi bạn xác nhận ở popup cảnh báo.
+                        </Alert>
+                      ) : releaseBlockedByState && escrow.status === 'Funded' ? (
+                        <Alert variant="warning" title="Release chưa an toàn">
+                          Deal chưa tới trạng thái giao hàng. Release chỉ mở khi có bằng chứng giao hàng
+                          (DeliverySubmitted / ReadyToRelease).
+                        </Alert>
+                      ) : null}
+                      {isOnChainSignature(escrow.txSignature) ? (
+                        <a
+                          href={explorerTxUrl(escrow.txSignature!)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-sm font-medium text-emerald-400 hover:text-emerald-300"
+                        >
+                          Xem trên Solana Explorer →
+                        </a>
+                      ) : escrow.txSignature ? (
+                        <p className="text-xs text-slate-500">
+                          Tx mô phỏng (chưa lên devnet): {shortAddress(escrow.txSignature, 6, 6)}
+                        </p>
+                      ) : null}
                     </>
                   ) : (
                     <>

@@ -5,6 +5,7 @@ import {
   encodeCursor,
   getEventForAction,
   getTargetStatusForAction,
+  hashDealTerms,
 } from './deals.utils';
 
 describe('deals.utils', () => {
@@ -37,5 +38,35 @@ describe('deals.utils', () => {
     expect(getEventForAction('open-invitation')).toBe('deal.invitation_opened');
     expect(getEventForAction('verify-wallets')).toBe('wallet.verified');
     expect(getEventForAction('cancel')).toBe('deal.cancelled');
+  });
+
+  it('hashes deal terms deterministically and independent of field ordering', () => {
+    const base = {
+      title: 'NFT sale',
+      description: 'A rare NFT',
+      type: 'nft',
+      amount: '10.5',
+      token: 'SOL',
+      deadline: new Date('2026-07-01T00:00:00.000Z'),
+    };
+    const hash = hashDealTerms(base);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    // Same logical terms → same hash; reconstructing the object preserves it.
+    expect(hashDealTerms({ ...base })).toBe(hash);
+    // Changing a load-bearing field changes the hash.
+    expect(hashDealTerms({ ...base, amount: '11' })).not.toBe(hash);
+  });
+
+  it('treats null/absent description and deadline consistently', () => {
+    const a = hashDealTerms({ title: 't', type: 'other', amount: '1', token: 'SOL' });
+    const b = hashDealTerms({
+      title: 't',
+      description: null,
+      type: 'other',
+      amount: '1',
+      token: 'SOL',
+      deadline: null,
+    });
+    expect(a).toBe(b);
   });
 });

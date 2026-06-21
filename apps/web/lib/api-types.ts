@@ -244,6 +244,13 @@ export interface RiskEventLive {
   triggerText: string;
   speaker: string;
   timestamp: string;
+  components?: {
+    conversationRisk: number;
+    walletRisk: number;
+    escrowStateRisk: number;
+    evidenceRisk: number;
+    repetitionPenalty: number;
+  };
 }
 
 export interface ChatMessageLive {

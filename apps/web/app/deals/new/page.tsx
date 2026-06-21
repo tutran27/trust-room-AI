@@ -54,12 +54,6 @@ function riskVariant(level?: string) {
   return 'muted' as const;
 }
 
-function textList(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
-    : [];
-}
-
 function objectList(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
@@ -213,7 +207,7 @@ export default function CreateDealPage() {
                       </Badge>
                       <Badge variant="muted">score {aiSummary.risk.score ?? '—'}</Badge>
                       <Badge variant={aiSummary.llmAvailable ? 'success' : 'warning'}>
-                        {aiSummary.llmAvailable ? 'LLM active' : 'fallback'}
+                        {aiSummary.llmAvailable ? 'Groq LLM' : 'Heuristic'}
                       </Badge>
                     </div>
                     {aiSummary.risk.recommendation ? (
@@ -223,13 +217,37 @@ export default function CreateDealPage() {
                     ) : null}
                   </div>
 
-                  {textList(termRecord?.summary).length ? (
+                  {termRecord?.notes && typeof termRecord.notes === 'string' ? (
                     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="mb-2 text-sm font-medium text-slate-100">Tóm tắt</p>
-                      <div className="space-y-2 text-sm text-slate-300">
-                        {textList(termRecord?.summary).map((item, index) => (
-                          <p key={index}>{item}</p>
-                        ))}
+                      <p className="mb-2 text-sm font-medium text-slate-100">Tóm tắt điều khoản</p>
+                      <p className="text-sm leading-6 text-slate-300">{termRecord.notes}</p>
+                    </div>
+                  ) : null}
+
+                  {termRecord?.totalAmount || termRecord?.deadline || termRecord?.disputeResolution ? (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="mb-3 text-sm font-medium text-slate-100">Điều khoản chính</p>
+                      <div className="grid gap-2 text-sm text-slate-300">
+                        {termRecord?.totalAmount ? (
+                          <div className="flex justify-between gap-3">
+                            <span className="text-slate-400">Tổng giá trị</span>
+                            <span className="text-slate-100">
+                              {String(termRecord.totalAmount)} {termRecord?.currency ? String(termRecord.currency) : ''}
+                            </span>
+                          </div>
+                        ) : null}
+                        {termRecord?.deadline ? (
+                          <div className="flex justify-between gap-3">
+                            <span className="text-slate-400">Deadline</span>
+                            <span className="text-slate-100">{String(termRecord.deadline)}</span>
+                          </div>
+                        ) : null}
+                        {termRecord?.disputeResolution ? (
+                          <div className="flex justify-between gap-3">
+                            <span className="text-slate-400">Xử lý tranh chấp</span>
+                            <span className="text-slate-100">{String(termRecord.disputeResolution)}</span>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}

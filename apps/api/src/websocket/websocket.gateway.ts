@@ -10,8 +10,13 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { analyzeTranscript } from '@trustroom/ai';
-import { type DealStatus } from '@trustroom/types';
+import {
+  runRules,
+  aggregateFullRisk,
+  repetitionPenalty,
+  type RuleHit,
+} from '@trustroom/ai';
+import { type DealStatus, type ScamIntent } from '@trustroom/types';
 import { NotificationsService } from '../notifications/notifications.service';
 
 interface ChatMessagePayload {
@@ -32,6 +37,14 @@ export class WebsocketGateway
   server!: Server;
 
   private readonly logger = new Logger(WebsocketGateway.name);
+
+  /**
+   * Recent dangerous intents per deal, kept in memory to power the repetition
+   * penalty. Bounded per deal so a long-lived room can't grow unbounded. This is
+   * best-effort signal only — losing it on restart just resets the penalty.
+   */
+  private readonly recentIntents = new Map<string, ScamIntent[]>();
+  private static readonly INTENT_HISTORY_CAP = 50;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -96,17 +109,33 @@ export class WebsocketGateway
 
   private async runScamGuard(data: ChatMessagePayload, timestamp: string) {
     let dealStatus: DealStatus = 'Negotiating' as DealStatus;
+    const knownWallets: string[] = [];
     try {
       const deal = await this.prisma.deal.findUnique({
         where: { id: data.dealId },
-        select: { status: true },
+        select: {
+          status: true,
+          participants: { select: { walletAddress: true } },
+          escrow: { select: { sellerAddress: true } },
+        },
       });
-      if (deal) dealStatus = deal.status as unknown as DealStatus;
+      if (deal) {
+        dealStatus = deal.status as unknown as DealStatus;
+        for (const p of deal.participants) {
+          if (p.walletAddress) knownWallets.push(p.walletAddress);
+        }
+        if (deal.escrow?.sellerAddress) knownWallets.push(deal.escrow.sellerAddress);
+      }
     } catch {
-      // default to Negotiating if the deal can't be loaded
+      // default to Negotiating with no known wallets if the deal can't be loaded
     }
 
-    const analysis = analyzeTranscript(data.message, dealStatus);
+    // Pass known wallets so EXTERNAL_WALLET can fire on addresses not in the deal.
+    const hits: RuleHit[] = runRules(
+      data.message,
+      dealStatus,
+      knownWallets.length > 0 ? knownWallets : undefined,
+    );
 
     // Persist the transcript chunk to the deal timeline (best-effort).
     void this.persistEvent(data.dealId, data.sender, 'transcript.chunk', {
@@ -114,15 +143,33 @@ export class WebsocketGateway
       speakerRole: data.speakerRole ?? 'buyer',
     });
 
-    if (analysis.hits.length === 0) return;
+    const currentIntents = Array.from(new Set(hits.map((h) => h.rule.intent)));
+    const priorIntents = this.recentIntents.get(data.dealId) ?? [];
+    const penalty = repetitionPenalty(currentIntents, priorIntents);
 
-    const reasons = analysis.hits.map((h) => h.rule.message);
+    // Record this message's intents into bounded history for future penalties.
+    if (currentIntents.length > 0) {
+      const updated = [...priorIntents, ...currentIntents].slice(
+        -WebsocketGateway.INTENT_HISTORY_CAP,
+      );
+      this.recentIntents.set(data.dealId, updated);
+    }
+
+    if (hits.length === 0) return;
+
+    const assessment = aggregateFullRisk({
+      conversationHits: hits,
+      repetitionPenalty: penalty,
+    });
+
+    const reasons = hits.map((h) => h.rule.message);
     const payload = {
       dealId: data.dealId,
-      score: analysis.score,
-      level: analysis.level,
-      intents: analysis.intents,
+      score: assessment.score,
+      level: assessment.level,
+      intents: currentIntents,
       reasons,
+      components: assessment.components,
       triggerText: data.message,
       speaker: data.sender,
       timestamp,
@@ -133,10 +180,10 @@ export class WebsocketGateway
     void this.persistEvent(data.dealId, data.sender, 'risk.detected', payload);
 
     // Notify the deal participants of a high/critical alert.
-    if (analysis.level === 'high' || analysis.level === 'critical') {
+    if (assessment.level === 'high' || assessment.level === 'critical') {
       void this.notifyParticipants(
         data.dealId,
-        `Scam Guard ${analysis.level} alert`,
+        `Scam Guard ${assessment.level} alert`,
         reasons[0] ?? 'Suspicious activity detected in the deal room.',
       );
     }

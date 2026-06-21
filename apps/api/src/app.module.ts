@@ -9,6 +9,7 @@ import { DisputesModule } from './disputes/disputes.module';
 import { EscrowModule } from './escrow/escrow.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReputationModule } from './reputation/reputation.module';
+import { WalletRiskModule } from './wallet-risk/wallet-risk.module';
 import { AgoraModule } from './agora/agora.module';
 import { AiModule } from './ai/ai.module';
 import { WebsocketModule } from './websocket/websocket.module';
@@ -29,6 +30,7 @@ import { MeetingsModule } from './meetings/meetings.module';
     EscrowModule,
     NotificationsModule,
     ReputationModule,
+    WalletRiskModule,
     AgoraModule,
     AiModule,
     WebsocketModule,

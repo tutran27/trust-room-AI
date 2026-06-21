@@ -20,8 +20,16 @@ import {
  */
 @Injectable()
 export class AiService {
-  // Auto-resolves Groq-first, then OpenAI, from the environment.
-  private readonly llmClient: LLMClient = getLLMClient();
+  /**
+   * Resolve the LLM client lazily on every use rather than caching it at
+   * construction. `getLLMClient()` returns the shared client only when a key is
+   * configured, otherwise a fresh (unconfigured) client — so adding GROQ_API_KEY to
+   * .env and restarting is enough to go live, with no stale-singleton from the
+   * moment the service was instantiated.
+   */
+  private get llmClient(): LLMClient {
+    return getLLMClient();
+  }
 
   get available(): boolean {
     return llmAvailable();

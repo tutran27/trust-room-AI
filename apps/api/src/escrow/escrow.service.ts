@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PublicKey } from '@solana/web3.js';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationType } from '@trustroom/db';
 import { CreateEscrowDto } from './dto/create-escrow.dto';
@@ -21,6 +22,11 @@ export class EscrowService {
     @Inject(WebsocketGateway) private readonly ws: WebsocketGateway,
     @Inject(SolanaService) private readonly solana: SolanaService,
   ) {}
+
+  /** Generate a plausible-looking, clearly-synthetic Solana tx signature. */
+  private syntheticSignature(): string {
+    return `SIM${randomBytes(32).toString('hex')}`;
+  }
 
   /** Create escrow + build unsigned init tx for buyer to sign. */
   async createEscrow(dto: CreateEscrowDto) {
@@ -286,6 +292,38 @@ export class EscrowService {
     });
 
     this.emit(escrow.dealId, 'escrow_refunded', { escrowId: id, status: 'Refunded', txSignature });
+    return { escrow: updated, txSignature };
+  }
+
+  /**
+   * Raise a dispute on a funded escrow (DB-only leg).
+   *
+   * Allowed only from 'Funded' — this is the single path that produces the
+   * 'Disputed' state that refundEscrow already accepts. AI/risk signals only
+   * warn; opening a dispute is an explicit human action, so we never auto-call
+   * this. The on-chain leg (buildRaiseDisputeIx in @trustroom/solana) will be
+   * wired when the Anchor program is deployed; for now the synthetic-signature
+   * pattern keeps the action consistent with the other lifecycle methods.
+   */
+  async raiseDispute(id: string, actorWallet: string, evidenceHash?: string) {
+    const escrow = await this.assertEscrow(id);
+    if (escrow.status !== 'Funded') {
+      throw new BadRequestException(`Cannot raise dispute on escrow in status: ${escrow.status}`);
+    }
+
+    const txSignature = this.syntheticSignature();
+    const updated = await this.prisma.escrow.update({
+      where: { id },
+      data: { status: 'Disputed', txSignature },
+    });
+
+    this.emit(escrow.dealId, 'escrow_disputed', {
+      escrowId: id,
+      status: 'Disputed',
+      actorWallet,
+      evidenceHash: evidenceHash ?? null,
+      txSignature,
+    });
     return { escrow: updated, txSignature };
   }
 

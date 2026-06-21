@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { DisputeResolution, DisputeStatus } from '@trustroom/db';
+import { DealStatus } from '@trustroom/types';
 import { AppException } from '../common/app-exception';
 import { PrismaService } from '../database/prisma.service';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
@@ -7,6 +8,8 @@ import { CreateEvidenceDto } from './dto/create-evidence.dto';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
 import { WebsocketGateway } from '../websocket/websocket.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DealsService } from '../deals/deals.service';
+import { hashEvidence, hashEvidenceBundle, resolutionToDealStatus } from './disputes.utils';
 
 @Injectable()
 export class DisputesService {
@@ -15,6 +18,7 @@ export class DisputesService {
     @Inject(WebsocketGateway) private readonly ws: WebsocketGateway,
     @Inject(NotificationsService)
     private readonly notifications: NotificationsService,
+    @Inject(DealsService) private readonly deals: DealsService,
   ) {}
 
   /** Best-effort: notify every participant of a deal + emit a realtime event. */
@@ -124,6 +128,7 @@ export class DisputesService {
         type: dto.type,
         content: dto.content,
         url: dto.url,
+        hash: hashEvidence(dto.content, dto.url),
       },
     });
   }
@@ -162,13 +167,30 @@ export class DisputesService {
     });
   }
 
-  async resolveDispute(disputeId: string, dto: ResolveDisputeDto) {
+  async resolveDispute(actorWallet: string, disputeId: string, dto: ResolveDisputeDto) {
     const dispute = await this.prisma.dispute.findUnique({
       where: { id: disputeId },
+      include: { deal: { include: { participants: true } }, evidence: true },
     });
 
     if (!dispute) {
       throw new AppException(HttpStatus.NOT_FOUND, 'DISPUTE_NOT_FOUND', 'Dispute not found.');
+    }
+
+    // RBAC: only a participant of the disputed deal may resolve it. There is no
+    // arbitrator role in the schema yet — a dedicated arbitrator/admin role should
+    // gate this in a later iteration (see notes). Until then participant-only is
+    // the minimum bar that closes the "anyone can resolve" hole.
+    if (
+      !dispute.deal.participants.some(
+        (participant) => participant.walletAddress === actorWallet,
+      )
+    ) {
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        'DISPUTE_FORBIDDEN',
+        'Only deal participants can resolve this dispute.',
+      );
     }
 
     if (dispute.status === DisputeStatus.Resolved) {
@@ -184,16 +206,41 @@ export class DisputesService {
       RefundToBuyer: DisputeResolution.RefundToBuyer,
       SplitPayment: DisputeResolution.SplitPayment,
     };
+    const resolution = resolutionMap[dto.resolution];
+
+    // Anchor the full evidence bundle into a single tamper-evident digest at
+    // resolution time, recomputing any missing per-item hashes defensively.
+    const evidenceHash = hashEvidenceBundle(
+      dispute.evidence.map((e) => e.hash ?? hashEvidence(e.content, e.url)),
+    );
 
     const resolved = await this.prisma.dispute.update({
       where: { id: disputeId },
       data: {
         status: DisputeStatus.Resolved,
-        resolution: resolutionMap[dto.resolution],
+        resolution,
         resolvedAt: new Date(),
       },
       include: { evidence: true, deal: true },
     });
+
+    // Drive the deal FSM into its resolved terminal state. The AI/dispute layer
+    // only warns and records — it never touches on-chain escrow here; this is the
+    // off-chain state transition (Disputed → ResolvedRelease|Refund|Split).
+    const targetStatus = resolutionToDealStatus(resolution);
+    try {
+      if (dispute.deal.status === DealStatus.Disputed) {
+        await this.deals.settleDisputedDeal(resolved.dealId, targetStatus, actorWallet);
+      }
+      if (evidenceHash) {
+        await this.prisma.deal.update({
+          where: { id: resolved.dealId },
+          data: { evidenceHash },
+        });
+      }
+    } catch {
+      /* best-effort: dispute is resolved even if deal settlement raced */
+    }
 
     try {
       this.ws.emitDisputeUpdate(resolved.id, {

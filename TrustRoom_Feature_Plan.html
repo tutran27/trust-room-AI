@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>TrustRoom AI — Kế hoạch Feature & Lý do đoạt giải</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: #1a1a2e; line-height: 1.55; font-size: 11pt; margin: 0;
+  }
+  h1 { font-size: 25pt; color: #0f3460; margin: 0 0 4px; letter-spacing: -0.5px; }
+  h2 {
+    font-size: 16pt; color: #0f3460; margin: 26px 0 10px;
+    border-bottom: 2.5px solid #16c79a; padding-bottom: 5px;
+  }
+  h3 { font-size: 12.5pt; color: #16213e; margin: 18px 0 6px; }
+  p { margin: 7px 0; }
+  .sub { color: #53607a; font-size: 12pt; margin-top: 2px; }
+  .tag {
+    display: inline-block; background: #16c79a; color: #fff; font-size: 8.5pt;
+    padding: 2px 9px; border-radius: 10px; font-weight: 600; letter-spacing: .3px;
+  }
+  .cover {
+    border: 1px solid #e0e4ec; border-left: 5px solid #16c79a;
+    background: #f7fafc; padding: 18px 20px; border-radius: 8px; margin: 14px 0 8px;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }
+  th { background: #0f3460; color: #fff; text-align: left; padding: 7px 9px; font-weight: 600; }
+  td { border: 1px solid #dce1ea; padding: 6px 9px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f4f7fa; }
+  .build { color: #0a9d6e; font-weight: 700; }
+  .maybe { color: #c47f17; font-weight: 700; }
+  .skip { color: #c0392b; font-weight: 700; }
+  .card {
+    border: 1px solid #e0e4ec; border-radius: 8px; padding: 14px 16px; margin: 14px 0;
+    page-break-inside: avoid;
+  }
+  .card.b { border-left: 5px solid #16c79a; }
+  .card.m { border-left: 5px solid #e0a325; }
+  .card.s { border-left: 5px solid #d65a4f; }
+  .pro { background: #eafaf3; border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
+  .con { background: #fdeeec; border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
+  .pro b { color: #0a9d6e; } .con b { color: #c0392b; }
+  .verdict { font-size: 10pt; margin: 8px 0 4px; }
+  code {
+    background: #eef1f6; padding: 1px 5px; border-radius: 4px;
+    font-family: "SF Mono", Menlo, monospace; font-size: 9pt; color: #0f3460;
+  }
+  ul { margin: 6px 0; padding-left: 20px; }
+  li { margin: 3px 0; }
+  .pagebreak { page-break-before: always; }
+  .pillar { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+  .pill {
+    background:#eef1f6; border:1px solid #d4dae6; border-radius:6px;
+    padding:5px 10px; font-size:9.5pt;
+  }
+  .foot { color:#8893a8; font-size:8.5pt; text-align:center; margin-top:6px; }
+  .big { font-size:11.5pt; }
+</style>
+</head>
+<body>
+
+<h1>TrustRoom AI</h1>
+<div class="sub">Kế hoạch Feature cho Hackathon — Các tính năng cần xây &amp; Lý do giúp đoạt giải</div>
+<div class="sub" style="font-size:10pt; color:#8893a8;">Ngày lập: 21/06/2026 · Phòng giao dịch escrow P2P có AI giám sát realtime</div>
+
+<div class="cover">
+  <p style="margin:0;"><b>Tài liệu này trả lời 2 câu hỏi:</b></p>
+  <p style="margin:6px 0 0;">1. Mỗi feature cần xây <b>làm gì</b> (chi tiết kỹ thuật &amp; trải nghiệm).</p>
+  <p style="margin:4px 0 0;">2. <b>Vì sao</b> nó giúp dự án ăn điểm trước giám khảo (tác động tới tiêu chí chấm).</p>
+  <p style="margin:8px 0 0; color:#53607a;">Các kết luận dưới đây là kết quả của một phiên tranh luận đối kháng (24 tác nhân: đề xuất → biện hộ → phản biện → trọng tài phán quyết), được kiểm chứng trực tiếp bằng mã nguồn thực tế của repo.</p>
+</div>
+
+<h2>1. TrustRoom AI là gì &amp; bài toán cốt lõi</h2>
+<p>Hai người lạ giao dịch tiền/tài sản số với nhau (mua bán token OTC, NFT, tài khoản, dịch vụ freelance). Vấn đề: <b>không có ai đứng giữa đáng tin</b> — dễ bị lừa release tiền sớm, bị dụ ra ngoài nền tảng, bị đòi seed phrase, hoặc tranh chấp mà không có bằng chứng.</p>
+<p><b>TrustRoom AI</b> là một "phòng giao dịch" nơi: hai bên đàm phán, một <b>AI Observer giám sát realtime cảnh báo lừa đảo</b>, <b>Solana escrow khóa tiền</b> cho tới khi đủ điều kiện, và <b>Evidence Vault lưu bằng chứng</b> chống chỉnh sửa. Điểm khác biệt sống còn so với mọi escrow thông thường: <b>AI can thiệp TRƯỚC khi người dùng làm điều nguy hiểm</b>, không phải xử lý sau khi đã mất tiền.</p>
+
+<div class="pillar">
+  <div class="pill"><b>Trụ 1:</b> Realtime Scam Guard <span style="color:#0a9d6e;">(điểm khác biệt cốt lõi)</span></div>
+  <div class="pill"><b>Trụ 2:</b> AI Deal Notary (trích xuất điều khoản)</div>
+  <div class="pill"><b>Trụ 3:</b> Solana Escrow</div>
+  <div class="pill"><b>Trụ 4:</b> Evidence Vault</div>
+</div>
+
+<h2>2. Hiện trạng — cái gì đã thật, cái gì còn yếu</h2>
+<p>Quan trọng để hiểu vì sao chọn các feature này: phần lõi <b>đã chạy thật</b>, nên các feature đề xuất chủ yếu là <b>làm cho công sức backend đã có trở nên nhìn thấy được</b> trên sân khấu — đòn bẩy cao, rủi ro thấp.</p>
+<table>
+  <tr><th style="width:50%;">Đã thật &amp; chạy được</th><th>Còn mock / yếu (điểm đau khi demo)</th></tr>
+  <tr>
+    <td>Scam Guard realtime: rule VI+EN + LLM intent qua Groq (đã có key) + risk aggregator 5 thành phần + repetition penalty + external-wallet parser</td>
+    <td>Voice/video + STT: <b>không có thật</b> — "call" chỉ là chat gõ tay. Pitch "AI nghe giọng nói" hiện rỗng</td>
+  </tr>
+  <tr>
+    <td>Wallet auth (ký Ed25519 thật + JWT), wallet risk (DB + Solana RPC thật), evidence SHA-256 hashing, deal FSM, reputation</td>
+    <td>Escrow on-chain: <b>simulated</b> — sinh chữ ký giả <code>SIM...</code>, không có transaction Solana thật</td>
+  </tr>
+  <tr>
+    <td>AI Deal Notary (term extraction, summary, dispute report) — gọi Groq thật</td>
+    <td>Playbook similarity (Qdrant): chưa có. UI Risk Panel chỉ hiện 1 sự kiện mới nhất, vứt đi phần lớn dữ liệu backend gửi</td>
+  </tr>
+</table>
+
+<div class="foot">TrustRoom AI — Feature Plan · trang 1</div>
+
+<div class="pagebreak"></div>
+<h2>3. Bảng tổng hợp phán quyết</h2>
+<table>
+  <tr><th style="width:30%;">Feature</th><th style="width:14%;">Phán quyết</th><th style="width:12%;">Công sức</th><th>Lý do một dòng</th></tr>
+  <tr><td><b>Live Risk Dashboard</b><br>gauge rủi ro + timeline intent</td><td class="build">BUILD</td><td>3–5h</td><td>Backend đã gửi đủ data, FE đang vứt đi — thu hồi giá trị sẵn có, rủi ro ~0</td></tr>
+  <tr><td><b>AI Guardian Release Guard</b><br>khóa nút Release theo risk</td><td class="build">BUILD</td><td>2–4h</td><td>Vá "nút ngu": AI hô critical mà nút Release vẫn bấm được</td></tr>
+  <tr><td><b>Demo Mode</b><br>replay kịch bản scam 1-click</td><td class="build">BUILD</td><td>~1h</td><td>Bảo hiểm demo live + kể trọn câu chuyện escalation</td></tr>
+  <tr><td><b>Escrow devnet thật</b><br>+ Explorer link</td><td class="build">BUILD</td><td>1–2h</td><td>Bịt tử huyệt: chữ ký <code>SIM...</code> dán vào Explorer = "not found"</td></tr>
+  <tr><td><b>Voice Scam Guard</b><br>Web Speech API</td><td class="maybe">MAYBE</td><td>2–3h</td><td>Vá pitch "AI nghe giọng nói" nhưng rủi ro vỡ live cao</td></tr>
+  <tr><td><b>AI Deal Notary</b><br>term sheet + ký (descope)</td><td class="maybe">MAYBE</td><td>4–6h</td><td>Khóa narrative "AI chuẩn bị — người ký", phần đắt lại vô hình</td></tr>
+</table>
+<p style="font-size:9.5pt; color:#53607a;">Tổng 4 feature BUILD ≈ <b>8–12 giờ</b>, tất cả thuần frontend/demo-safe, không dựng hạ tầng mới.</p>
+
+<h2>4. Chi tiết các feature NÊN XÂY (BUILD)</h2>
+
+<div class="card b">
+  <span class="tag">BUILD · ƯU TIÊN 1</span>
+  <h3>4.1 — Live Risk Dashboard (đồng hồ rủi ro sống)</h3>
+  <p><b>Làm gì:</b> Nâng cấp panel AI monitor từ chỗ chỉ in vài dòng text xám (hiện chỉ render <code>riskEvents[0]</code>) thành một bảng điều khiển sống: một <b>đồng hồ đo (gauge) 0–100</b> leo theo hội thoại, đổi màu xanh → vàng → cam → đỏ theo ngưỡng 24/49/79; bên dưới là <b>timeline các intent đã phát hiện</b> (early_release, external_wallet, credential_request…) kèm câu nói kích hoạt; nhấn mạnh hiệu ứng <b>repetition penalty leo thang</b> khi đối phương lặp lại một chiêu.</p>
+  <p><b>Ràng buộc kỹ thuật quan trọng (từ phản biện):</b> Chỉ hiển thị <b>2 thanh có dữ liệu thật</b> (conversation risk + repetition penalty). Ẩn 3 thanh wallet/escrow/evidence vì gateway hiện chỉ truyền 2/5 thành phần — nếu hiện đủ 5 thì 3 thanh sẽ <b>mãi bằng 0</b>, tự phơi bày engine chưa đấu nối trước giám khảo.</p>
+  <div class="pro"><b>Vì sao đoạt giải:</b> Đây là đòn bẩy "wow trên mỗi giờ công" cao nhất — toàn bộ dữ liệu đã được backend sản xuất và đẩy realtime qua websocket, frontend chỉ đang lãng phí. Nó biến điểm khác biệt cốt lõi (Scam Guard) từ thứ "chạy ngầm vô hình" thành thứ <b>giám khảo nhìn thấy phản ứng ngay trước mắt</b>. Đúng tinh thần guardrail của spec: "giải thích lý do, không phải hộp đen" — đối thủ chỉ chặn/không, TrustRoom giải thích VÌ SAO và theo dòng thời gian.</p>
+  <p class="verdict"><b>Phán quyết:</b> <span class="build">BUILD</span> (tin cậy cao) · <b>nền tảng — làm trước tiên</b>, vì cả Demo Mode lẫn Release Guard đều dựa lên panel này để tạo hiệu ứng.</p>
+</div>
+
+<div class="card b">
+  <span class="tag">BUILD · ƯU TIÊN 2</span>
+  <h3>4.2 — AI Guardian Release Guard (chốt chặn giao dịch)</h3>
+  <p><b>Làm gì:</b> Khi nhận sự kiện rủi ro mức high/critical, frontend KHÔNG chỉ hiện text mà <b>can thiệp</b>: bung một modal đỏ nổi bật ("CẢNH BÁO LỪA ĐẢO") kèm intent + lý do + câu nói kích hoạt, <b>đồng thời khóa cứng các nút Release / Refund / Fund / confirm-terms</b> cho tới khi người dùng bấm "Tôi hiểu, vẫn tiếp tục". Kèm nút "Ghi vào Evidence Vault". Bổ sung Release Guard tĩnh: chặn release khi deal chưa tới trạng thái giao hàng.</p>
+  <p><b>Vá lỗi đã kiểm chứng trong code:</b> Hiện nút Release xuất hiện chỉ dựa theo <code>escrow.status === 'Funded'</code>, <b>hoàn toàn không đọc trạng thái rủi ro</b>. Nghĩa là AI hô "critical" bên trái mà nút Release bên phải vẫn xanh, bấm được — giám khảo chắc chắn sẽ hỏi <i>"vậy AI cảnh báo để làm gì?"</i></p>
+  <div class="pro"><b>Vì sao đoạt giải:</b> Đây là <b>câu chuyện khác biệt DUY NHẤT</b> không escrow nào khác kể được: "AI circuit breaker chặn tay bạn TRƯỚC khi mất tiền". Khoảnh khắc giám khảo thấy nút Release đỏ lên và bị khóa ngay trước mắt là điểm nhấn cảm xúc mạnh nhất của cả phần demo. Nó khâu Trụ 1 (Scam Guard) với Trụ 3 (Escrow) và kéo Trụ 4 (Evidence) vào. Thuần frontend, tái lập 100%, không phụ thuộc mạng.</p>
+  <div class="con"><b>Phản biện đã tiếp thu — phần phải CẮT:</b> Bỏ cơ chế ack phía server (đụng vòng đời FSM, dễ race khi reconnect socket, bề mặt lỗi vô hình); bỏ beep/rung (qua loa hội trường trông như bug); KHÔNG che toàn màn hình (false-positive bung giữa demo → lạc nút trước mặt giám khảo). Dùng ack <b>client-side</b> + modal có nút thoát luôn thấy rõ.</p>
+  <p class="verdict"><b>Phán quyết:</b> <span class="build">BUILD phần lõi</span>, <span class="skip">SKIP phần gimmick</span> (tin cậy cao).</p>
+</div>
+
+<div class="card b">
+  <span class="tag">BUILD · ƯU TIÊN 3</span>
+  <h3>4.3 — Demo Mode: Red-team Replay (kịch bản scam 1-click)</h3>
+  <p><b>Làm gì:</b> Một nút "Phát kịch bản lừa đảo" tự bơm một chuỗi tin nhắn theo timeline leo thang (xây niềm tin → rủ ra ngoài nền tảng → gửi ví lạ → khoe bill giả → đòi seed phrase → ép release sớm), mỗi 2–3 giây một câu. Risk score leo thang trực quan, alert critical bật, nút release bị chặn ở cuối.</p>
+  <p><b>Điểm tinh tế:</b> Nút này emit <code>chat_message</code> đi qua <b>đúng pipeline mà người thật dùng</b> (cùng runRules, aggregateFullRisk, repetition penalty với lịch sử intent thật) — KHÔNG có nhánh code riêng cho demo. Vì vậy nó là <b>bằng chứng tính thật</b>, không phải lớp diễn.</p>
+  <div class="pro"><b>Vì sao đoạt giải:</b> Giải đúng "nghịch lý wow" của sản phẩm an ninh — logic tinh vi nhất (penalty khi lặp chiêu + escalation theo trạng thái deal) chỉ bộc lộ khi có một CHUỖI tin nhắn nhịp nhàng, mà presenter gõ tay live thì chậm, ngượng, trông dàn dựng. Đây vừa là feature vừa là <b>bảo hiểm</b>: deterministic, lặp lại được, không phụ thuộc mic/mạng/Groq khi đứng trước giám khảo.</p>
+  <div class="con"><b>Ràng buộc bắt buộc:</b> Làm SAU dashboard + release guard (nếu làm trước, giám khảo chỉ thấy chat tự nhảy + badge đổi màu = nhạt). Escalation phải đạt được bằng rule/keyword THUẦN, coi Groq là bonus async; dùng timer client-side, không phải timer server.</p>
+  <p class="verdict"><b>Phán quyết:</b> <span class="build">BUILD</span> (tin cậy cao) — lớp mỏng ~1h.</p>
+</div>
+
+<div class="card b">
+  <span class="tag">BUILD · ƯU TIÊN 4 · TIMEBOX 1–2h</span>
+  <h3>4.4 — Escrow Solana devnet THẬT + link Explorer (KHÔNG dùng Anchor)</h3>
+  <p><b>Làm gì:</b> Thay chữ ký giả <code>SIM...</code> bằng transaction Solana devnet thật qua <code>@solana/web3.js</code> (đã có sẵn): deposit/release chuyển SOL giữa hai keypair devnet được nạp tiền sẵn, lưu chữ ký thật, render nút <b>"Xem trên Solana Explorer"</b>. KHÔNG đụng tới Anchor program (skeleton, thiếu toolchain).</p>
+  <p><b>Vá tử huyệt:</b> Hiện mọi deposit/release sinh <code>SIM${'{'}randomBytes(32){'}'}</code>. Giám khảo Web3 chỉ cần dán chữ ký vào Explorer → "Transaction not found" → sụp Trụ 3 và kéo nghi ngờ lên cả 3 trụ còn lại.</p>
+  <div class="pro"><b>Vì sao đoạt giải:</b> Giám khảo Web3 luôn soi tính thật on-chain. Một cú click Release ra transaction mở được trên Explorer là cú nhảy uy tín lớn về độ hoàn thiện. Chi phí gần như bằng 0 vì API contract đã cố ý chờ sẵn (chỉ cần lật cờ <code>simulated</code>, không đổi controller/DTO/FSM).</p>
+  <div class="con"><b>Ràng buộc nghiêm ngặt (chống vỡ demo):</b> Dùng keypair <b>nạp tiền trước</b>, TUYỆT ĐỐI không <code>requestAirdrop</code> live (dính rate-limit 429). Bọc try/catch fallback về <code>SIM...</code> giữ cờ simulated để RPC lỗi thì degrade êm. KHÔNG làm Memo on-chain (vô hình, tốn công).</p>
+  <p class="verdict"><b>Phán quyết:</b> <span class="build">BUILD</span> (tin cậy trung bình) — chỉ trong hộp thời gian 1–2h, nếu quá thì hạ xuống MAYBE.</p>
+</div>
+
+<div class="foot">TrustRoom AI — Feature Plan · trang 2–3</div>
+
+<div class="pagebreak"></div>
+<h2>5. Các feature CÂN NHẮC (MAYBE)</h2>
+
+<div class="card m">
+  <span class="tag" style="background:#e0a325;">MAYBE</span>
+  <h3>5.1 — Voice Scam Guard qua Web Speech API (bỏ Agora)</h3>
+  <p><b>Làm gì:</b> Dùng Web Speech API của trình duyệt (miễn phí, có sẵn Chrome/Edge, hỗ trợ vi-VN + en-US) bắt giọng nói hai bên, chuyển thành text rồi đẩy vào đúng luồng <code>chat_message</code> hiện có. Toàn bộ Scam Guard phía sau tái dùng 100%, không sửa backend. Thêm nút "Bật mic", waveform, caption chạy chữ; giữ fallback gõ tay.</p>
+  <div class="pro"><b>Lập luận ủng hộ:</b> Vá đúng lỗ hổng chí mạng của pitch — "AI nghe đàm phán bằng giọng nói" hiện đang là transcript gõ tay. Chi phí gần như bằng 0 (0 dòng backend), tận dụng đúng Trụ 1.</p>
+  <div class="con"><b>Lập luận phản biện (vì sao chỉ MAYBE):</b> (1) "AI nghe" là ảo tưởng kỹ thuật — Web Speech stream audio lên server Google rồi trả text, cái "nghe" không phải của mình. (2) Rủi ro vỡ live cao: bắt buộc HTTPS/localhost, hội trường ồn → STT tiếng Việt nghe sai → risk meter đứng im giữa demo; Firefox/Safari không hỗ trợ. (3) Chỉ là <b>input method khác</b> cho cùng pipeline đã demo được bằng gõ — không thêm logic phát hiện mới. (4) Làm càng kịch tính càng mời câu hỏi nguy hiểm "người hay mic gõ dòng này?"</p>
+  <p class="verdict"><b>Điều kiện nếu làm:</b> chỉ gửi kết quả cuối (không gửi từng mảnh kẻo bơm phồng điểm rủi ro); demo trên localhost Chrome máy của team với câu đã test trước; timebox 2–3h; pitch trung thực "giám sát mọi kênh, gõ hay nói đều bị soi". Chỉ làm SAU 4 feature BUILD.</p>
+</div>
+
+<div class="card m">
+  <span class="tag" style="background:#e0a325;">MAYBE</span>
+  <h3>5.2 — AI Deal Notary: term sheet tự dựng + ký termsHash (bản descope)</h3>
+  <p><b>Làm gì (bản rút gọn):</b> Một panel gọi <code>extractTerms</code> (Groq, đã thật) trên transcript theo nút bấm, render bảng điều khoản có cấu trúc; sau đó cho ký <code>termsHash</code> một lần bằng ví demo (tái dùng chữ ký Ed25519 đã có), đẩy deal sang trạng thái TermsConfirmed.</p>
+  <div class="pro"><b>Lập luận ủng hộ:</b> Đây là mảnh DUY NHẤT khóa được narrative "AI chuẩn bị — con người quyết &amp; ký" — trả lời trực diện nỗi sợ "AI tự quyết tiền". termsHash ký bởi ví là artifact mật mã thật.</p>
+  <div class="con"><b>Phản biện (vì sao chỉ làm bản descope):</b> Bản đầy đủ ~10–16h vì hình dạng dữ liệu extractor không khớp bảng đã hứa (phải sửa xuyên package), UI chưa có chuỗi nút để chạm trạng thái Negotiating, và cổng ký 2 bên chưa tồn tại. Tệ hơn: toàn bộ công crypto thật <b>vô hình</b> với giám khảo (nhìn "đã ký" không phân biệt được Ed25519 thật với việc đổi trạng thái). Bản đầy đủ = ROI âm.</p>
+  <p class="verdict"><b>Phán quyết:</b> <span class="maybe">MAYBE</span> — chỉ làm bản descope ~4–6h nếu còn dư giờ sau 4 feature BUILD.</p>
+</div>
+
+<h2>6. Các feature DỨT KHOÁT BỎ (SKIP)</h2>
+<table>
+  <tr><th style="width:34%;">Feature</th><th>Vì sao bỏ</th></tr>
+  <tr><td class="skip">Anchor/Rust escrow on-chain thật (deploy program)</td><td>Skeleton, thiếu toolchain, deploy live rủi ro cao dễ vỡ giữa demo. Bản SystemProgram.transfer (đã đưa vào BUILD) bịt cùng lỗ hổng với 1/10 rủi ro.</td></tr>
+  <tr><td class="skip">Playbook Similarity (Qdrant + bge-m3)</td><td>Hoàn toàn vô hình trên sân khấu — giám khảo không thấy similarity search chạy. Tốn nhiều công hạ tầng mới mà không ghi điểm demo.</td></tr>
+  <tr><td class="skip">Ack phía server + beep/rung + overlay che toàn màn hình</td><td>Scope creep đụng FSM/race reconnect (vô hình); beep qua loa trông như bug; overlay che hết màn → false-positive là lạc nút trước giám khảo. Thay bằng ack client-side + modal có nút thoát rõ.</td></tr>
+  <tr><td class="skip">Memo on-chain + airdrop live</td><td>Memo vô hình (không ai decode kịp trong 5 phút). Airdrop live dính rate-limit 429 → vỡ demo công khai. Dùng keypair nạp sẵn.</td></tr>
+  <tr><td class="skip">Risk Dashboard bản 5 thanh đầy đủ</td><td>Gateway chỉ truyền 2/5 thành phần → 3 thanh mãi bằng 0, tự phơi bày engine chưa đấu nối. Chỉ hiện 2 thanh có data thật.</td></tr>
+</table>
+
+<div class="pagebreak"></div>
+<h2>7. Kịch bản demo 4 phút — "AI Circuit Breaker cho giao dịch P2P"</h2>
+<p style="color:#53607a;"><b>Định khung trung thực:</b> "TrustRoom giám sát MỌI kênh đàm phán — gõ hay nói đều bị soi realtime." Né câu hỏi STT engine; KHÔNG khoe "AI nghe giọng nói" nếu chưa làm Voice.</p>
+<table>
+  <tr><th style="width:16%;">Thời gian</th><th>Diễn biến</th></tr>
+  <tr><td><b>0:00–0:30</b></td><td>Mở Deal Room đang ở trạng thái escrow Funded. Giới thiệu 4 trụ cột. Chỉ vào Risk Dashboard đang xanh/im.</td></tr>
+  <tr><td><b>0:30–2:00</b></td><td>Bấm <b>Red-team Replay</b>: kịch bản scammer chạy từng câu nhịp 2–3s qua đúng pipeline thật. Gauge leo xanh→vàng→cam, timeline intent hiện CREDENTIAL_REQUEST / EXTERNAL_WALLET. <b>Cao trào:</b> scammer lặp một chiêu 2–3 lần → repetition penalty đẩy kim vọt ĐỎ. Nhấn mạnh: "đặc sản chống social-engineering, không đối thủ nào có" và "escalation này đạt bằng rule thuần, không phụ thuộc mạng".</td></tr>
+  <tr><td><b>2:00–3:00</b></td><td><b>Câu chốt đắt nhất:</b> khi risk = critical, thử bấm nút Release → <b>AI Guardian CHẶN</b> bằng modal đỏ kèm lý do + câu kích hoạt, khóa cứng tới khi xác nhận. Đây là trả lời trực diện "AI cảnh báo để làm gì". Bấm "Ghi vào Evidence Vault" để snapshot bằng chứng (kéo Trụ 4).</td></tr>
+  <tr><td><b>3:00–4:00</b></td><td><b>Chứng minh tính thật:</b> mở một deal đã release hợp lệ, bấm "Xem trên Solana Explorer" → transaction devnet THẬT hiện ra (không phải SIM giả). Đóng vòng: "Scam Guard thật + escrow verify được on-chain + evidence hash hóa".</td></tr>
+</table>
+<p style="font-size:9.5pt; color:#53607a;"><b>Bảo hiểm demo:</b> toàn bộ luồng wow chính (replay → escalation → release block) là client-side deterministic, lặp lại 100% không phụ thuộc network; escrow có fallback SIM nếu RPC lỗi. Nếu kịp làm Notary descope: chèn 30s giữa phần — AI tự dựng term sheet rồi ký termsHash bằng ví.</p>
+
+<h2>8. Vì sao bộ feature này thắng — đối chiếu tiêu chí chấm</h2>
+<table>
+  <tr><th style="width:24%;">Tiêu chí giám khảo</th><th>Feature đáp ứng</th></tr>
+  <tr><td><b>Tính khác biệt</b></td><td>Release Guard + repetition penalty = "AI circuit breaker chặn tay trước khi mất tiền" — không escrow nào khác có. Đây là câu chuyện độc nhất.</td></tr>
+  <tr><td><b>Wow khi demo live</b></td><td>Gauge leo đỏ realtime + nút Release bị khóa ngay trước mắt = khoảnh khắc cảm xúc mạnh, nhìn thấy được tức thì.</td></tr>
+  <tr><td><b>Độ hoàn thiện end-to-end</b></td><td>Luồng đủ 4 trụ: phát hiện (Scam Guard) → can thiệp (Release Guard) → bằng chứng (Evidence Vault) → on-chain thật (Explorer link).</td></tr>
+  <tr><td><b>Ấn tượng kỹ thuật</b></td><td>Risk scoring cộng dồn + giải thích minh bạch (không hộp đen) + transaction Solana verify được. Replay chứng minh engine thật, không phải lớp diễn.</td></tr>
+  <tr><td><b>Độ tin cậy demo (không vỡ)</b></td><td>Mọi feature BUILD là client-side deterministic, có fallback; né dứt khoát các hạng mục rủi ro (Anchor deploy, airdrop live, mic hội trường).</td></tr>
+</table>
+
+<div class="cover" style="border-left-color:#0f3460;">
+  <p style="margin:0;"><b>Tóm tắt khuyến nghị:</b> Xây 4 feature BUILD theo thứ tự <b>Dashboard → Release Guard → Replay → Escrow Explorer</b> (~8–12h, thuần frontend/demo-safe). Cân nhắc Voice/Notary descope nếu dư giờ. Tất cả tận dụng phần backend đã chạy thật, biến công sức ẩn thành điểm nhấn nhìn thấy được — đòn bẩy điểm số cao nhất với rủi ro thấp nhất trong quỹ thời gian hackathon.</p>
+</div>
+
+<div class="foot">TrustRoom AI — Feature Plan · trang 4–5 · Kết quả từ phiên tranh luận đối kháng 24 tác nhân, kiểm chứng bằng mã nguồn thực tế</div>
+</body>
+</html>
