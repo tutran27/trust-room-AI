@@ -21,6 +21,7 @@ import { AuthGate } from '../../../components/auth-gate';
 import { StatusBadge } from '../../../components/status-badge';
 import {
   useAddEvidence,
+  useConfirmEscrowCreated,
   useCreateDispute,
   useCreateEscrow,
   useCreateMeeting,
@@ -28,6 +29,7 @@ import {
   useDetectScam,
   useDispute,
   useEscrowByDeal,
+  useGetUnsignedTx,
   useFundEscrow,
   useMeetingsByDeal,
   useInviteSeller,
@@ -36,6 +38,7 @@ import {
   useTransitionDeal,
   useUpdateDeal,
 } from '../../../hooks/use-api';
+import { signAndSendTx, isPhantomInstalled } from '../../../lib/solana';
 import { useDealRoom } from '../../../hooks/use-deal-room';
 import {
   formatAmount,
@@ -90,6 +93,10 @@ export default function DealDetailPage() {
   );
   const [editDescription, setEditDescription] = useState('');
   const [evidenceContent, setEvidenceContent] = useState('Screenshot / transcript evidence');
+  const [escrowLoading, setEscrowLoading] = useState<string | null>(null);
+  const [escrowError, setEscrowError] = useState<string | null>(null);
+  const getUnsignedTx = useGetUnsignedTx();
+  const confirmCreated = useConfirmEscrowCreated();
 
   const activeDisputeId = deal?.status === 'Disputed' ? undefined : undefined;
   const currentDispute = useDispute(activeDisputeId ?? null);
@@ -102,7 +109,7 @@ export default function DealDetailPage() {
     <AuthGate>
       <AppShell
         title={deal?.title ?? 'Deal room'}
-        subtitle="Bảng điều phối deal theo thời gian thực: tập trung vào chat, Scam Guard, meeting room và các hành động quỹ/dispute quan trọng."
+        subtitle="Bảng điều phối deal theo thời gian thực: tập trung vào chat, Scam Guard, meeting room, escrow Solana devnet và các hành động quỹ/dispute."
         contentClassName="max-w-[1920px] px-3 md:px-5 2xl:px-8"
         actions={
           <>
@@ -497,10 +504,23 @@ export default function DealDetailPage() {
 
               <Card className="border-white/10 bg-slate-950/70">
                 <CardHeader className="pb-4">
-                  <CardTitle>Escrow demo</CardTitle>
-                  <CardDescription>Giữ lại các action quỹ quan trọng nhưng hiển thị gọn hơn.</CardDescription>
+                  <CardTitle>Escrow (Solana Devnet)</CardTitle>
+                  <CardDescription>Giao dịch SOL thật trên devnet — cần Phantom wallet để ký.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {escrowError ? (
+                    <Alert variant="danger" title="Lỗi escrow">{escrowError}</Alert>
+                  ) : null}
+
+                  {!isPhantomInstalled() ? (
+                    <Alert variant="warning" title="Cần cài Phantom wallet">
+                      <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer" className="underline">
+                        Cài Phantom
+                      </a>{' '}
+                      để ký giao dịch Solana thật.
+                    </Alert>
+                  ) : null}
+
                   {escrow ? (
                     <>
                       <div className="flex items-center justify-between">
@@ -509,18 +529,87 @@ export default function DealDetailPage() {
                           {formatAmount(escrow.amount, deal.token)}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-300">
-                        Seller nhận: {shortAddress(escrow.sellerAddress, 5, 5)}
-                      </p>
+                      <p className="text-xs text-slate-400">Buyer: {shortAddress(escrow.buyerAddress, 6, 6)}</p>
+                      <p className="text-xs text-slate-400">Seller: {shortAddress(escrow.sellerAddress, 6, 6)}</p>
+                      {escrow.txSignature ? (
+                        <a
+                          href={`https://solscan.io/tx/${escrow.txSignature}?cluster=devnet`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-emerald-400 underline"
+                        >
+                          Xem tx trên Solscan →
+                        </a>
+                      ) : null}
                       <div className="flex flex-wrap gap-3">
                         {escrow.status === 'Created' ? (
-                          <Button onClick={() => fundEscrow.mutate(escrow.id)}>Fund</Button>
+                          <Button
+                            disabled={escrowLoading !== null}
+                            onClick={async () => {
+                              setEscrowError(null);
+                              setEscrowLoading('fund');
+                              try {
+                                // 1. Get unsigned tx from API
+                                const res = await getUnsignedTx.mutateAsync({
+                                  path: `/escrow/${escrow.id}/fund`,
+                                });
+                                // 2. Sign with Phantom + send to devnet
+                                const sig = await signAndSendTx(res.txBase64);
+                                // 3. Confirm on backend
+                                await fundEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                              } catch (err) {
+                                setEscrowError(err instanceof Error ? err.message : 'Fund failed');
+                              } finally {
+                                setEscrowLoading(null);
+                              }
+                            }}
+                          >
+                            {escrowLoading === 'fund' ? 'Đang ký & gửi...' : 'Fund (nạp tiền)'}
+                          </Button>
                         ) : null}
+
                         {escrow.status === 'Funded' ? (
                           <>
-                            <Button onClick={() => releaseEscrow.mutate(escrow.id)}>Release</Button>
-                            <Button variant="secondary" onClick={() => refundEscrow.mutate(escrow.id)}>
-                              Refund
+                            <Button
+                              disabled={escrowLoading !== null}
+                              onClick={async () => {
+                                setEscrowError(null);
+                                setEscrowLoading('release');
+                                try {
+                                  const res = await getUnsignedTx.mutateAsync({
+                                    path: `/escrow/${escrow.id}/release`,
+                                  });
+                                  const sig = await signAndSendTx(res.txBase64);
+                                  await releaseEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                } catch (err) {
+                                  setEscrowError(err instanceof Error ? err.message : 'Release failed');
+                                } finally {
+                                  setEscrowLoading(null);
+                                }
+                              }}
+                            >
+                              {escrowLoading === 'release' ? 'Đang ký & gửi...' : 'Release (rút tiền)'}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              disabled={escrowLoading !== null}
+                              onClick={async () => {
+                                setEscrowError(null);
+                                setEscrowLoading('refund');
+                                try {
+                                  const res = await getUnsignedTx.mutateAsync({
+                                    path: `/escrow/${escrow.id}/refund`,
+                                  });
+                                  const sig = await signAndSendTx(res.txBase64);
+                                  await refundEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                } catch (err) {
+                                  setEscrowError(err instanceof Error ? err.message : 'Refund failed');
+                                } finally {
+                                  setEscrowLoading(null);
+                                }
+                              }}
+                            >
+                              {escrowLoading === 'refund' ? 'Đang ký & gửi...' : 'Refund (hoàn tiền)'}
                             </Button>
                           </>
                         ) : null}
@@ -529,19 +618,42 @@ export default function DealDetailPage() {
                   ) : (
                     <>
                       <Alert title="Chưa tạo escrow">
-                        Tạo escrow mô phỏng để mở khóa flow payment/release/refund.
+                        Tạo escrow trên Solana devnet để bắt đầu flow nạp tiền thật.
                       </Alert>
                       <Button
-                        onClick={() =>
-                          createEscrow.mutate({
-                            dealId: deal.id,
-                            amount: deal.amount,
-                            sellerWallet: deal.sellerWallet ?? '',
-                          })
-                        }
-                        disabled={!deal.sellerWallet || createEscrow.isPending}
+                        disabled={!deal.sellerWallet || createEscrow.isPending || !address}
+                        onClick={async () => {
+                          setEscrowError(null);
+                          setEscrowLoading('create');
+                          try {
+                            const buyerWallet = address ?? '';
+                            const sellerWallet = deal.sellerWallet ?? '';
+                            // Validate addresses before sending
+                            if (!buyerWallet || buyerWallet.length < 32) {
+                              throw new Error('Buyer wallet address is invalid. Please reconnect Phantom.');
+                            }
+                            if (!sellerWallet || sellerWallet.length < 32) {
+                              throw new Error('Seller wallet address is invalid. Please invite seller first.');
+                            }
+                            // 1. API creates DB record + returns unsigned init tx
+                            const res = await createEscrow.mutateAsync({
+                              dealId: deal.id,
+                              amount: deal.amount,
+                              sellerWallet,
+                              buyerWallet,
+                            });
+                            // 2. Sign with Phantom + send to devnet
+                            const sig = await signAndSendTx(res.txBase64);
+                            // 3. Confirm on backend
+                            await confirmCreated.mutateAsync({ escrowId: res.escrow.id, txSignature: sig });
+                          } catch (err) {
+                            setEscrowError(err instanceof Error ? err.message : 'Create escrow failed');
+                          } finally {
+                            setEscrowLoading(null);
+                          }
+                        }}
                       >
-                        Tạo escrow
+                        {escrowLoading === 'create' ? 'Đang ký & tạo on-chain...' : 'Tạo escrow on-chain'}
                       </Button>
                     </>
                   )}

@@ -44,7 +44,10 @@ export interface Escrow {
   id: string;
   dealId: string;
   amount: string;
+  buyerAddress: string;
   sellerAddress: string;
+  tokenMint: string;
+  dealIdHash: string | null;
   status: 'Created' | 'Funded' | 'Released' | 'Refunded' | 'Disputed';
   txSignature: string | null;
   createdAt: string;
@@ -53,8 +56,10 @@ export interface Escrow {
 
 export interface EscrowActionResult {
   escrow: Escrow;
-  simulated: boolean;
-  txSignature?: string;
+  txBase64: string;
+  dealIdHash?: string;
+  tokenMint?: string;
+  message?: string;
 }
 
 export interface EvidenceRecord {

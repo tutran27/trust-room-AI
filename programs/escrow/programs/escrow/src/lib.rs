@@ -1,23 +1,18 @@
-//! TrustRoom AI escrow program (skeleton).
+//! TrustRoom AI escrow program.
 //!
-//! Locks buyer funds for a deal and enforces state transitions. AI never calls
-//! release/refund — only the authorized buyer (release) or dispute resolution
-//! authority (resolve_dispute) can move funds. On-chain we store only minimal,
-//! non-sensitive data: pubkeys, amount, state, and the terms/evidence hashes.
-//!
-//! NOTE: This is an unimplemented scaffold. Function bodies validate state and
-//! emit events; SPL-token transfers (deposit/release/refund) are marked TODO and
-//! must be wired to `anchor_spl::token` before devnet deployment.
+//! Locks buyer funds (SOL) for a deal and enforces state transitions.
+//! AI never calls release/refund — only the authorized buyer (release)
+//! or dispute resolution authority (resolve_dispute) can move funds.
 
 use anchor_lang::prelude::*;
+use anchor_lang::system_program;
 
-declare_id!("Escrow111111111111111111111111111111111111");
+declare_id!("3DyccqgiVSUupDEfgvME8rduMHAgJdLxqhGEdPuhbjR7");
 
 #[program]
 pub mod trustroom_escrow {
     use super::*;
 
-    /// Create the escrow account (PDA) for a deal and record the agreed metadata.
     pub fn initialize_deal(
         ctx: Context<InitializeDeal>,
         deal_id_hash: [u8; 32],
@@ -27,74 +22,129 @@ pub mod trustroom_escrow {
         escrow.deal_id_hash = deal_id_hash;
         escrow.buyer = ctx.accounts.buyer.key();
         escrow.seller = ctx.accounts.seller.key();
-        escrow.token_mint = ctx.accounts.token_mint.key();
         escrow.amount = amount;
         escrow.state = EscrowState::Initialized;
         escrow.terms_hash = [0u8; 32];
         escrow.evidence_hash = [0u8; 32];
         escrow.created_at = Clock::get()?.unix_timestamp;
         escrow.bump = ctx.bumps.escrow;
-        emit!(EscrowEvent { deal_id_hash, state: escrow.state });
+
+        // Create vault PDA via system_program::create_account
+        let vault_bump = ctx.bumps.vault;
+        let vault_seeds: &[&[u8]] = &[b"vault", deal_id_hash.as_ref(), &[vault_bump]];
+        let vault_lamports = Rent::get()?.minimum_balance(0);
+
+        system_program::create_account(
+            CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::CreateAccount {
+                    from: ctx.accounts.buyer.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
+                },
+                &[vault_seeds],
+            ),
+            vault_lamports,
+            0, // space
+            &ctx.program_id, // owner = this program
+        )?;
+
+        emit!(EscrowCreated {
+            deal_id_hash,
+            buyer: escrow.buyer,
+            seller: escrow.seller,
+            amount,
+        });
         Ok(())
     }
 
-    /// Buyer deposits `amount` of the SPL token into the escrow vault.
     pub fn deposit(ctx: Context<Deposit>) -> Result<()> {
         let escrow = &mut ctx.accounts.escrow;
         require!(escrow.state == EscrowState::Initialized, EscrowError::InvalidState);
-        // TODO: anchor_spl::token::transfer(buyer_ata -> vault, escrow.amount)
+
+        // Transfer SOL: buyer → vault PDA
+        let ix = anchor_lang::solana_program::system_instruction::transfer(
+            &ctx.accounts.buyer.key(),
+            &ctx.accounts.vault.key(),
+            escrow.amount,
+        );
+        anchor_lang::solana_program::program::invoke(
+            &ix,
+            &[
+                ctx.accounts.buyer.to_account_info(),
+                ctx.accounts.vault.to_account_info(),
+            ],
+        )?;
+
         escrow.state = EscrowState::Deposited;
-        emit!(EscrowEvent { deal_id_hash: escrow.deal_id_hash, state: escrow.state });
+        emit!(EscrowStateChanged {
+            deal_id_hash: escrow.deal_id_hash,
+            state: escrow.state,
+        });
         Ok(())
     }
 
-    /// Record that both parties signed the canonical terms hash (verified off-chain).
     pub fn confirm_terms(ctx: Context<Mutate>, terms_hash: [u8; 32]) -> Result<()> {
         let escrow = &mut ctx.accounts.escrow;
         require!(escrow.state == EscrowState::Deposited, EscrowError::InvalidState);
         escrow.terms_hash = terms_hash;
         escrow.state = EscrowState::TermsConfirmed;
-        emit!(EscrowEvent { deal_id_hash: escrow.deal_id_hash, state: escrow.state });
+        emit!(EscrowStateChanged {
+            deal_id_hash: escrow.deal_id_hash,
+            state: escrow.state,
+        });
         Ok(())
     }
 
-    /// Seller marks delivery as submitted (proof stored off-chain in Evidence Vault).
     pub fn submit_delivery(ctx: Context<Mutate>) -> Result<()> {
         let escrow = &mut ctx.accounts.escrow;
         require!(escrow.state == EscrowState::TermsConfirmed, EscrowError::InvalidState);
         escrow.state = EscrowState::DeliverySubmitted;
-        emit!(EscrowEvent { deal_id_hash: escrow.deal_id_hash, state: escrow.state });
+        emit!(EscrowStateChanged {
+            deal_id_hash: escrow.deal_id_hash,
+            state: escrow.state,
+        });
         Ok(())
     }
 
-    /// Buyer releases funds to the seller. Invalid before delivery is submitted.
-    pub fn release(ctx: Context<Settle>) -> Result<()> {
+    pub fn release(ctx: Context<Release>) -> Result<()> {
         let escrow = &mut ctx.accounts.escrow;
         require!(
             escrow.state == EscrowState::DeliverySubmitted,
             EscrowError::ReleaseBeforeDelivery
         );
-        require_keys_eq!(ctx.accounts.authority.key(), escrow.buyer, EscrowError::Unauthorized);
-        // TODO: anchor_spl::token::transfer(vault -> seller_ata, escrow.amount)
+        require_keys_eq!(ctx.accounts.buyer.key(), escrow.buyer, EscrowError::Unauthorized);
+
+        // Transfer SOL: vault PDA → seller
+        **ctx.accounts.vault.try_borrow_mut_lamports()? -= escrow.amount;
+        **ctx.accounts.seller.try_borrow_mut_lamports()? += escrow.amount;
+
         escrow.state = EscrowState::Released;
-        emit!(EscrowEvent { deal_id_hash: escrow.deal_id_hash, state: escrow.state });
+        emit!(EscrowReleased {
+            deal_id_hash: escrow.deal_id_hash,
+            amount: escrow.amount,
+        });
         Ok(())
     }
 
-    /// Refund the buyer (timeout / mutual cancel before release).
-    pub fn refund(ctx: Context<Settle>) -> Result<()> {
+    pub fn refund(ctx: Context<Refund>) -> Result<()> {
         let escrow = &mut ctx.accounts.escrow;
         require!(
             matches!(escrow.state, EscrowState::Deposited | EscrowState::TermsConfirmed),
             EscrowError::InvalidState
         );
-        // TODO: anchor_spl::token::transfer(vault -> buyer_ata, escrow.amount)
+
+        // Transfer SOL: vault PDA → buyer
+        **ctx.accounts.vault.try_borrow_mut_lamports()? -= escrow.amount;
+        **ctx.accounts.buyer.try_borrow_mut_lamports()? += escrow.amount;
+
         escrow.state = EscrowState::Refunded;
-        emit!(EscrowEvent { deal_id_hash: escrow.deal_id_hash, state: escrow.state });
+        emit!(EscrowRefunded {
+            deal_id_hash: escrow.deal_id_hash,
+            amount: escrow.amount,
+        });
         Ok(())
     }
 
-    /// Either party raises a dispute, freezing funds until resolution.
     pub fn raise_dispute(ctx: Context<Mutate>, evidence_hash: [u8; 32]) -> Result<()> {
         let escrow = &mut ctx.accounts.escrow;
         require!(
@@ -106,28 +156,52 @@ pub mod trustroom_escrow {
         );
         escrow.evidence_hash = evidence_hash;
         escrow.state = EscrowState::Disputed;
-        emit!(EscrowEvent { deal_id_hash: escrow.deal_id_hash, state: escrow.state });
+        emit!(EscrowStateChanged {
+            deal_id_hash: escrow.deal_id_hash,
+            state: escrow.state,
+        });
         Ok(())
     }
 
-    /// Dispute resolution authority settles a disputed deal (release / refund / split).
-    pub fn resolve_dispute(ctx: Context<Settle>, outcome: DisputeOutcome) -> Result<()> {
+    pub fn resolve_dispute(ctx: Context<ResolveDispute>, outcome: DisputeOutcome) -> Result<()> {
         let escrow = &mut ctx.accounts.escrow;
         require!(escrow.state == EscrowState::Disputed, EscrowError::InvalidState);
-        // TODO: distribute funds according to `outcome`
-        let _ = outcome;
+
+        match outcome {
+            DisputeOutcome::Release => {
+                **ctx.accounts.vault.try_borrow_mut_lamports()? -= escrow.amount;
+                **ctx.accounts.seller.try_borrow_mut_lamports()? += escrow.amount;
+            }
+            DisputeOutcome::Refund => {
+                **ctx.accounts.vault.try_borrow_mut_lamports()? -= escrow.amount;
+                **ctx.accounts.buyer.try_borrow_mut_lamports()? += escrow.amount;
+            }
+            DisputeOutcome::Split => {
+                let half = escrow.amount / 2;
+                let seller_amount = half;
+                let buyer_amount = escrow.amount - half;
+                **ctx.accounts.vault.try_borrow_mut_lamports()? -= escrow.amount;
+                **ctx.accounts.seller.try_borrow_mut_lamports()? += seller_amount;
+                **ctx.accounts.buyer.try_borrow_mut_lamports()? += buyer_amount;
+            }
+        }
+
         escrow.state = EscrowState::Resolved;
-        emit!(EscrowEvent { deal_id_hash: escrow.deal_id_hash, state: escrow.state });
+        emit!(EscrowResolved {
+            deal_id_hash: escrow.deal_id_hash,
+            outcome,
+        });
         Ok(())
     }
 }
+
+// ── Account Structs ─────────────────────────────────────────────────────────
 
 #[account]
 pub struct EscrowAccount {
     pub deal_id_hash: [u8; 32],
     pub buyer: Pubkey,
     pub seller: Pubkey,
-    pub token_mint: Pubkey,
     pub amount: u64,
     pub state: EscrowState,
     pub terms_hash: [u8; 32],
@@ -137,9 +211,12 @@ pub struct EscrowAccount {
 }
 
 impl EscrowAccount {
-    // discriminator(8) + 32 + 32 + 32 + 32 + 8 + 1 + 32 + 32 + 8 + 1
-    pub const SPACE: usize = 8 + 32 + 32 + 32 + 32 + 8 + 1 + 32 + 32 + 8 + 1;
+    // discriminator(8) + deal_id_hash(32) + buyer(32) + seller(32) + amount(8)
+    // + state(1) + terms_hash(32) + evidence_hash(32) + created_at(8) + bump(1)
+    pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 1 + 32 + 32 + 8 + 1;
 }
+
+// ── Enums ───────────────────────────────────────────────────────────────────
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum EscrowState {
@@ -160,11 +237,41 @@ pub enum DisputeOutcome {
     Split,
 }
 
+// ── Events ──────────────────────────────────────────────────────────────────
+
 #[event]
-pub struct EscrowEvent {
+pub struct EscrowCreated {
+    pub deal_id_hash: [u8; 32],
+    pub buyer: Pubkey,
+    pub seller: Pubkey,
+    pub amount: u64,
+}
+
+#[event]
+pub struct EscrowStateChanged {
     pub deal_id_hash: [u8; 32],
     pub state: EscrowState,
 }
+
+#[event]
+pub struct EscrowReleased {
+    pub deal_id_hash: [u8; 32],
+    pub amount: u64,
+}
+
+#[event]
+pub struct EscrowRefunded {
+    pub deal_id_hash: [u8; 32],
+    pub amount: u64,
+}
+
+#[event]
+pub struct EscrowResolved {
+    pub deal_id_hash: [u8; 32],
+    pub outcome: DisputeOutcome,
+}
+
+// ── Errors ──────────────────────────────────────────────────────────────────
 
 #[error_code]
 pub enum EscrowError {
@@ -175,6 +282,8 @@ pub enum EscrowError {
     #[msg("Signer is not authorized for this action.")]
     Unauthorized,
 }
+
+// ── Context Structs ─────────────────────────────────────────────────────────
 
 #[derive(Accounts)]
 #[instruction(deal_id_hash: [u8; 32])]
@@ -187,12 +296,21 @@ pub struct InitializeDeal<'info> {
         bump
     )]
     pub escrow: Account<'info, EscrowAccount>,
+
+    /// CHECK: vault PDA — holds SOL balance
+    #[account(
+        mut,
+        seeds = [b"vault", deal_id_hash.as_ref()],
+        bump
+    )]
+    pub vault: UncheckedAccount<'info>,
+
     #[account(mut)]
     pub buyer: Signer<'info>,
+
     /// CHECK: stored for reference only; validated off-chain.
     pub seller: UncheckedAccount<'info>,
-    /// CHECK: SPL mint of the escrowed token.
-    pub token_mint: UncheckedAccount<'info>,
+
     pub system_program: Program<'info, System>,
 }
 
@@ -200,8 +318,15 @@ pub struct InitializeDeal<'info> {
 pub struct Deposit<'info> {
     #[account(mut, seeds = [b"escrow", escrow.deal_id_hash.as_ref()], bump = escrow.bump)]
     pub escrow: Account<'info, EscrowAccount>,
+
+    /// CHECK: vault PDA — holds SOL balance
+    #[account(mut, seeds = [b"vault", escrow.deal_id_hash.as_ref()], bump)]
+    pub vault: AccountInfo<'info>,
+
     #[account(mut, address = escrow.buyer)]
     pub buyer: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -212,8 +337,61 @@ pub struct Mutate<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Settle<'info> {
+pub struct Release<'info> {
     #[account(mut, seeds = [b"escrow", escrow.deal_id_hash.as_ref()], bump = escrow.bump)]
     pub escrow: Account<'info, EscrowAccount>,
+
+    /// CHECK: vault PDA — holds SOL balance
+    #[account(mut, seeds = [b"vault", escrow.deal_id_hash.as_ref()], bump)]
+    pub vault: AccountInfo<'info>,
+
+    /// Only the buyer can release.
+    #[account(address = escrow.buyer)]
+    pub buyer: Signer<'info>,
+
+    /// CHECK: seller wallet to receive SOL
+    #[account(mut, address = escrow.seller)]
+    pub seller: AccountInfo<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct Refund<'info> {
+    #[account(mut, seeds = [b"escrow", escrow.deal_id_hash.as_ref()], bump = escrow.bump)]
+    pub escrow: Account<'info, EscrowAccount>,
+
+    /// CHECK: vault PDA — holds SOL balance
+    #[account(mut, seeds = [b"vault", escrow.deal_id_hash.as_ref()], bump)]
+    pub vault: AccountInfo<'info>,
+
+    /// Only the buyer can request refund.
+    #[account(address = escrow.buyer)]
+    pub buyer: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ResolveDispute<'info> {
+    #[account(mut, seeds = [b"escrow", escrow.deal_id_hash.as_ref()], bump = escrow.bump)]
+    pub escrow: Account<'info, EscrowAccount>,
+
+    /// CHECK: vault PDA — holds SOL balance
+    #[account(mut, seeds = [b"vault", escrow.deal_id_hash.as_ref()], bump)]
+    pub vault: AccountInfo<'info>,
+
+    /// Only the buyer (as dispute authority for MVP) can resolve.
+    #[account(address = escrow.buyer)]
     pub authority: Signer<'info>,
+
+    /// CHECK: seller wallet
+    #[account(mut, address = escrow.seller)]
+    pub seller: AccountInfo<'info>,
+
+    /// CHECK: buyer wallet (for refund/split)
+    #[account(mut, address = escrow.buyer)]
+    pub buyer: AccountInfo<'info>,
+
+    pub system_program: Program<'info, System>,
 }

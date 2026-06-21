@@ -51,7 +51,7 @@ export class DealsService {
         title: dto.title,
         description: dto.description,
         type: dto.type,
-        amount: new Prisma.Decimal(dto.amount),
+        amount: new Prisma.Decimal(String(dto.amount)),
         token: dto.token,
         deadline: dto.deadline ? new Date(dto.deadline) : null,
         participants: {

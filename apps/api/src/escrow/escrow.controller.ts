@@ -1,12 +1,5 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Inject,
-  Param,
-  UseGuards,
-  Request,
+  Controller, Get, Post, Body, Inject, Param, UseGuards, Request,
 } from '@nestjs/common';
 import { EscrowService } from './escrow.service';
 import { CreateEscrowDto } from './dto/create-escrow.dto';
@@ -27,14 +20,34 @@ export class EscrowController {
     return this.escrowService.fundEscrow(id, req.user.wallet);
   }
 
+  @Post(':id/confirm-created')
+  async confirmCreated(@Param('id') id: string, @Body('txSignature') txSignature: string) {
+    return this.escrowService.confirmCreated(id, txSignature);
+  }
+
+  @Post(':id/confirm-funded')
+  async confirmFunded(@Param('id') id: string, @Body('txSignature') txSignature: string) {
+    return this.escrowService.confirmFunded(id, txSignature);
+  }
+
   @Post(':id/release')
   async release(@Param('id') id: string) {
     return this.escrowService.releaseEscrow(id);
   }
 
+  @Post(':id/confirm-released')
+  async confirmReleased(@Param('id') id: string, @Body('txSignature') txSignature: string) {
+    return this.escrowService.confirmReleased(id, txSignature);
+  }
+
   @Post(':id/refund')
   async refund(@Param('id') id: string) {
     return this.escrowService.refundEscrow(id);
+  }
+
+  @Post(':id/confirm-refunded')
+  async confirmRefunded(@Param('id') id: string, @Body('txSignature') txSignature: string) {
+    return this.escrowService.confirmRefunded(id, txSignature);
   }
 
   @Get('deal/:dealId')
@@ -50,5 +63,10 @@ export class EscrowController {
   @Get('wallet/:wallet')
   async listByWallet(@Param('wallet') wallet: string) {
     return this.escrowService.listByWallet(wallet);
+  }
+
+  @Get(':id/onchain')
+  async getOnChainState(@Param('id') id: string) {
+    return this.escrowService.getOnChainState(id);
   }
 }

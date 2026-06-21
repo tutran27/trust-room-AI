@@ -1,9 +1,5 @@
-import { IsOptional, IsString, Matches } from 'class-validator';
+import { IsOptional, IsString, Matches, Length } from 'class-validator';
 
-/**
- * Create-escrow payload. Kept minimal to match what the simulated escrow stores.
- * `amount` is a decimal string to avoid float precision loss.
- */
 export class CreateEscrowDto {
   @IsString()
   dealId!: string;
@@ -13,9 +9,16 @@ export class CreateEscrowDto {
   amount!: string;
 
   @IsString()
+  @Length(32, 44, { message: 'buyerWallet must be a valid Solana address (32-44 base58 chars)' })
+  @Matches(/^[1-9A-HJ-NP-Za-km-z]+$/, { message: 'buyerWallet must be base58 (no 0, O, I, l)' })
+  buyerWallet!: string;
+
+  @IsString()
+  @Length(32, 44, { message: 'sellerWallet must be a valid Solana address (32-44 base58 chars)' })
+  @Matches(/^[1-9A-HJ-NP-Za-km-z]+$/, { message: 'sellerWallet must be base58 (no 0, O, I, l)' })
   sellerWallet!: string;
 
   @IsOptional()
   @IsString()
-  buyerWallet?: string;
+  tokenMint?: string;
 }

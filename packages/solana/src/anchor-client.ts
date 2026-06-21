@@ -4,6 +4,8 @@
  * Provides typed helpers for interacting with the on-chain escrow program.
  * Uses raw Connection + Transaction instructions (no Anchor workspace dependency)
  * so the API can call it without bundling the full Anchor framework.
+ *
+ * SOL-based: all escrow transactions use native SOL (lamports), not SPL tokens.
  */
 
 import {
@@ -17,7 +19,7 @@ import {
 import { getConnection, deriveEscrowPda, type SolanaCluster } from './index';
 
 // ── Program ID (must match declare_id! in lib.rs) ──────────────────────────
-export const ESCROW_PROGRAM_ID = new PublicKey('Escrow111111111111111111111111111111111111');
+export const ESCROW_PROGRAM_ID = new PublicKey('3DyccqgiVSUupDEfgvME8rduMHAgJdLxqhGEdPuhbjR7');
 
 // ── Escrow state enum (mirrors on-chain enum) ───────────────────────────────
 export enum EscrowState {
@@ -42,7 +44,6 @@ export interface EscrowAccountData {
   dealIdHash: Buffer;
   buyer: PublicKey;
   seller: PublicKey;
-  tokenMint: PublicKey;
   amount: bigint;
   state: EscrowState;
   termsHash: Buffer;
@@ -53,10 +54,19 @@ export interface EscrowAccountData {
 
 // ── Discriminator (first 8 bytes of SHA256("global:method_name")) ───────────
 function methodDiscriminator(method: string): Buffer {
-  // Anchor uses first 8 bytes of sha256("global:<method>")
   const crypto = require('crypto') as typeof import('crypto');
   const hash = crypto.createHash('sha256').update(`global:${method}`).digest();
   return hash.subarray(0, 8);
+}
+
+// ── PDA Derivation Helpers ──────────────────────────────────────────────────
+
+/** Derive the vault PDA that holds escrowed SOL. */
+export function deriveVaultPda(programId: PublicKey, dealIdHash: Buffer): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('vault'), Buffer.from(dealIdHash)],
+    programId,
+  );
 }
 
 // ── Client ──────────────────────────────────────────────────────────────────
@@ -79,6 +89,12 @@ export class EscrowClient {
     return pda;
   }
 
+  /** Derive the vault PDA for a given deal ID hash. */
+  deriveVault(dealIdHash: Buffer): PublicKey {
+    const [pda] = deriveVaultPda(this.programId, dealIdHash);
+    return pda;
+  }
+
   /** Fetch and decode the escrow account for a deal. */
   async getEscrow(dealIdHash: Buffer): Promise<EscrowAccountData | null> {
     const pda = this.derivePda(dealIdHash);
@@ -87,46 +103,76 @@ export class EscrowClient {
     return this.decodeEscrowAccount(accountInfo.data);
   }
 
-  /** Build an initialize_deal instruction. */
-  buildInitializeDealIx(
+  /**
+   * Build a full InitializeDeal transaction.
+   * Creates the escrow PDA (vault PDA is a system account, created by buyer SOL transfer).
+   */
+  async buildInitializeDealTx(
     dealIdHash: Buffer,
     amount: bigint,
     buyer: PublicKey,
     seller: PublicKey,
-    tokenMint: PublicKey,
-  ): TransactionInstruction {
+  ): Promise<Transaction> {
     const pda = this.derivePda(dealIdHash);
-    const discriminator = methodDiscriminator('initialize_deal');
+    const vault = this.deriveVault(dealIdHash);
 
-    return new TransactionInstruction({
+    const discriminator = methodDiscriminator('initialize_deal');
+    const ix = new TransactionInstruction({
       keys: [
         { pubkey: pda, isSigner: false, isWritable: true },
+        { pubkey: vault, isSigner: false, isWritable: true },
         { pubkey: buyer, isSigner: true, isWritable: true },
         { pubkey: seller, isSigner: false, isWritable: false },
-        { pubkey: tokenMint, isSigner: false, isWritable: false },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       programId: this.programId,
       data: Buffer.concat([discriminator, dealIdHash, this.encodeU64(amount)]),
     });
+
+    const tx = new Transaction();
+    tx.add(ix);
+    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.lastValidBlockHeight = lastValidBlockHeight;
+    tx.feePayer = buyer;
+    return tx;
   }
 
-  /** Build a deposit instruction. */
-  buildDepositIx(dealIdHash: Buffer, buyer: PublicKey): TransactionInstruction {
+  /**
+   * Build a Deposit transaction.
+   * Transfers SOL from buyer to vault PDA.
+   */
+  async buildDepositTx(
+    dealIdHash: Buffer,
+    buyer: PublicKey,
+  ): Promise<Transaction> {
     const pda = this.derivePda(dealIdHash);
-    const discriminator = methodDiscriminator('deposit');
+    const vault = this.deriveVault(dealIdHash);
 
-    return new TransactionInstruction({
+    const discriminator = methodDiscriminator('deposit');
+    const ix = new TransactionInstruction({
       keys: [
         { pubkey: pda, isSigner: false, isWritable: true },
+        { pubkey: vault, isSigner: false, isWritable: true },
         { pubkey: buyer, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       programId: this.programId,
       data: Buffer.concat([discriminator]),
     });
+
+    const tx = new Transaction();
+    tx.add(ix);
+    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.lastValidBlockHeight = lastValidBlockHeight;
+    tx.feePayer = buyer;
+    return tx;
   }
 
-  /** Build a confirm_terms instruction. */
+  /**
+   * Build a confirm_terms instruction.
+   */
   buildConfirmTermsIx(
     dealIdHash: Buffer,
     termsHash: Buffer,
@@ -145,7 +191,9 @@ export class EscrowClient {
     });
   }
 
-  /** Build a submit_delivery instruction. */
+  /**
+   * Build a submit_delivery instruction.
+   */
   buildSubmitDeliveryIx(dealIdHash: Buffer, authority: PublicKey): TransactionInstruction {
     const pda = this.derivePda(dealIdHash);
     const discriminator = methodDiscriminator('submit_delivery');
@@ -160,37 +208,75 @@ export class EscrowClient {
     });
   }
 
-  /** Build a release instruction (buyer releases funds to seller). */
-  buildReleaseIx(dealIdHash: Buffer, buyer: PublicKey): TransactionInstruction {
+  /**
+   * Build a Release transaction.
+   * Transfers SOL from vault PDA to seller. Only buyer can call.
+   */
+  async buildReleaseTx(
+    dealIdHash: Buffer,
+    buyer: PublicKey,
+    seller: PublicKey,
+  ): Promise<Transaction> {
     const pda = this.derivePda(dealIdHash);
+    const vault = this.deriveVault(dealIdHash);
+
     const discriminator = methodDiscriminator('release');
-
-    return new TransactionInstruction({
+    const ix = new TransactionInstruction({
       keys: [
         { pubkey: pda, isSigner: false, isWritable: true },
+        { pubkey: vault, isSigner: false, isWritable: true },
         { pubkey: buyer, isSigner: true, isWritable: false },
+        { pubkey: seller, isSigner: false, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       programId: this.programId,
       data: Buffer.concat([discriminator]),
     });
+
+    const tx = new Transaction();
+    tx.add(ix);
+    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.lastValidBlockHeight = lastValidBlockHeight;
+    tx.feePayer = buyer;
+    return tx;
   }
 
-  /** Build a refund instruction. */
-  buildRefundIx(dealIdHash: Buffer, authority: PublicKey): TransactionInstruction {
+  /**
+   * Build a Refund transaction.
+   * Transfers SOL from vault PDA back to buyer.
+   */
+  async buildRefundTx(
+    dealIdHash: Buffer,
+    buyer: PublicKey,
+  ): Promise<Transaction> {
     const pda = this.derivePda(dealIdHash);
-    const discriminator = methodDiscriminator('refund');
+    const vault = this.deriveVault(dealIdHash);
 
-    return new TransactionInstruction({
+    const discriminator = methodDiscriminator('refund');
+    const ix = new TransactionInstruction({
       keys: [
         { pubkey: pda, isSigner: false, isWritable: true },
-        { pubkey: authority, isSigner: true, isWritable: false },
+        { pubkey: vault, isSigner: false, isWritable: true },
+        { pubkey: buyer, isSigner: true, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       programId: this.programId,
       data: Buffer.concat([discriminator]),
     });
+
+    const tx = new Transaction();
+    tx.add(ix);
+    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.lastValidBlockHeight = lastValidBlockHeight;
+    tx.feePayer = buyer;
+    return tx;
   }
 
-  /** Build a raise_dispute instruction. */
+  /**
+   * Build a raise_dispute instruction.
+   */
   buildRaiseDisputeIx(
     dealIdHash: Buffer,
     evidenceHash: Buffer,
@@ -209,26 +295,56 @@ export class EscrowClient {
     });
   }
 
-  /** Build a resolve_dispute instruction. */
-  buildResolveDisputeIx(
+  /**
+   * Build a ResolveDispute transaction.
+   * Transfers funds according to outcome (release/refund/split).
+   */
+  async buildResolveDisputeTx(
     dealIdHash: Buffer,
     outcome: DisputeOutcome,
     authority: PublicKey,
-  ): TransactionInstruction {
+    buyer: PublicKey,
+    seller: PublicKey,
+  ): Promise<Transaction> {
     const pda = this.derivePda(dealIdHash);
-    const discriminator = methodDiscriminator('resolve_dispute');
+    const vault = this.deriveVault(dealIdHash);
 
+    const discriminator = methodDiscriminator('resolve_dispute');
     const outcomeBuf = Buffer.alloc(1);
     outcomeBuf.writeUInt8(outcome);
 
-    return new TransactionInstruction({
+    const ix = new TransactionInstruction({
       keys: [
         { pubkey: pda, isSigner: false, isWritable: true },
+        { pubkey: vault, isSigner: false, isWritable: true },
         { pubkey: authority, isSigner: true, isWritable: false },
+        { pubkey: seller, isSigner: false, isWritable: true },
+        { pubkey: buyer, isSigner: false, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       programId: this.programId,
       data: Buffer.concat([discriminator, outcomeBuf]),
     });
+
+    const tx = new Transaction();
+    tx.add(ix);
+    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.lastValidBlockHeight = lastValidBlockHeight;
+    tx.feePayer = authority;
+    return tx;
+  }
+
+  /** Send and confirm a signed transaction, return the tx signature. */
+  async sendAndConfirm(
+    signedTx: Transaction,
+  ): Promise<string> {
+    const sig = await this.connection.sendRawTransaction(signedTx.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+    });
+    await this.connection.confirmTransaction(sig, 'confirmed');
+    return sig;
   }
 
   /** Get the current Solana connection. */
@@ -246,8 +362,6 @@ export class EscrowClient {
     offset += 32;
     const seller = new PublicKey(data.subarray(offset, offset + 32));
     offset += 32;
-    const tokenMint = new PublicKey(data.subarray(offset, offset + 32));
-    offset += 32;
     const amount = data.readBigUInt64LE(offset);
     offset += 8;
     const state = data.readUInt8(offset) as EscrowState;
@@ -264,7 +378,6 @@ export class EscrowClient {
       dealIdHash: Buffer.from(dealIdHash),
       buyer,
       seller,
-      tokenMint,
       amount,
       state,
       termsHash: Buffer.from(termsHash),

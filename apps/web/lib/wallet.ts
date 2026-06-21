@@ -49,14 +49,29 @@ export function resetDemoWallet(): void {
   if (typeof window !== 'undefined') window.localStorage.removeItem(DEMO_KEY);
 }
 
+/** Get the Phantom provider from window (supports both legacy and modern API). */
+function getPhantomProvider(): any {
+  if (typeof window === 'undefined') return null;
+  // Modern Phantom: window.phantom.solana
+  const phantom = (window as any).phantom;
+  if (phantom?.solana?.isPhantom) return phantom.solana;
+  // Legacy Phantom: window.solana
+  if ((window as any).solana?.isPhantom) return (window as any).solana;
+  // Last resort: any provider with connect() and signTransaction()
+  if (phantom?.solana?.connect) return phantom.solana;
+  if ((window as any).solana?.connect) return (window as any).solana;
+  console.log('[TrustRoom] Phantom not detected. window.phantom:', typeof phantom, 'window.solana:', typeof (window as any).solana);
+  return null;
+}
+
 export function hasPhantom(): boolean {
-  return typeof window !== 'undefined' && Boolean((window as any).solana?.isPhantom);
+  return getPhantomProvider() !== null;
 }
 
 /** Connect a Phantom wallet and return its base58 address. */
 export async function connectPhantom(): Promise<string> {
-  const provider = (window as any).solana;
-  if (!provider?.isPhantom) throw new Error('Phantom wallet not found.');
+  const provider = getPhantomProvider();
+  if (!provider) throw new Error('Phantom wallet not found. Please install Phantom extension.');
   const res = await provider.connect();
   return res.publicKey.toString();
 }
@@ -66,8 +81,8 @@ export async function signAuthMessage(kind: WalletKind, message: string): Promis
   const messageBytes = new TextEncoder().encode(message);
 
   if (kind === 'phantom') {
-    const provider = (window as any).solana;
-    if (!provider?.isPhantom) throw new Error('Phantom wallet not found.');
+    const provider = getPhantomProvider();
+    if (!provider) throw new Error('Phantom wallet not found. Please install Phantom extension.');
     const address: string = provider.publicKey?.toString() ?? (await connectPhantom());
     const { signature } = await provider.signMessage(messageBytes, 'utf8');
     return { address, signature: bs58.encode(signature as Uint8Array) };

@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-trustroom_escrow = "Escrow111111111111111111111111111111111111"
+trustroom_escrow = "3DyccqgiVSUupDEfgvME8rduMHAgJdLxqhGEdPuhbjR7"
 
 [programs.devnet]
-trustroom_escrow = "Escrow111111111111111111111111111111111111"
+trustroom_escrow = "3DyccqgiVSUupDEfgvME8rduMHAgJdLxqhGEdPuhbjR7"
 
 [provider]
 cluster = "devnet"

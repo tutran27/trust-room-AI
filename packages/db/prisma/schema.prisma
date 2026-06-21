@@ -152,7 +152,10 @@ model Escrow {
   id            String       @id @default(cuid())
   dealId        String       @unique
   amount        Decimal      @db.Decimal(38, 18)
+  buyerAddress  String
   sellerAddress String
+  tokenMint     String
+  dealIdHash    String?
   status        EscrowStatus @default(Created)
   txSignature   String?
   createdAt     DateTime     @default(now())

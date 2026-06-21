@@ -1,13 +1,21 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@trustroom/db';
 
 @Injectable()
 export class PrismaService
   extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
+  implements OnModuleDestroy
 {
-  async onModuleInit(): Promise<void> {
-    await this.$connect();
+  private readonly logger = new Logger(PrismaService.name);
+
+  constructor() {
+    super();
+    // Don't crash on missing DB — modules catch Prisma errors themselves
+    this.$connect().catch((err: unknown) => {
+      this.logger.warn(
+        `DB unavailable at startup, deferring (${(err as Error)?.message ?? err}). Some features will be unavailable until DB is reachable.`,
+      );
+    });
   }
 
   async onModuleDestroy(): Promise<void> {

@@ -4,8 +4,8 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "outDir": "dist",
-    "rootDir": ".",
+    "rootDir": "src",
     "declaration": true
   },
-  "include": ["src/**/*.ts", "generated/client/**/*.ts"]
+  "include": ["src/**/*.ts"]
 }
