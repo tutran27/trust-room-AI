@@ -4,17 +4,17 @@ import { cn } from './cn.js';
 type AlertVariant = 'info' | 'success' | 'warning' | 'danger';
 
 const VARIANTS: Record<AlertVariant, string> = {
-  info: 'border-sky-500/30 bg-sky-500/10 text-sky-100',
-  success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
-  warning: 'border-amber-500/30 bg-amber-500/10 text-amber-100',
-  danger: 'border-red-500/30 bg-red-500/10 text-red-100',
+  info: 'border-sky-500/20 bg-sky-500/[0.06]',
+  success: 'border-emerald-500/20 bg-emerald-500/[0.06]',
+  warning: 'border-amber-500/20 bg-amber-500/[0.06]',
+  danger: 'border-red-500/20 bg-red-500/[0.06]',
 };
 
 const TITLE_COLORS: Record<AlertVariant, string> = {
-  info: 'text-sky-300',
-  success: 'text-emerald-300',
-  warning: 'text-amber-300',
-  danger: 'text-red-300',
+  info: 'text-sky-400',
+  success: 'text-emerald-400',
+  warning: 'text-amber-400',
+  danger: 'text-red-400',
 };
 
 export interface AlertProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -38,7 +38,7 @@ export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
       {title ? (
         <p className={cn('mb-1 font-semibold', TITLE_COLORS[variant])}>{title}</p>
       ) : null}
-      {children ? <div className="text-slate-200/90">{children}</div> : null}
+      {children ? <div className="text-zinc-300">{children}</div> : null}
     </div>
   ),
 );

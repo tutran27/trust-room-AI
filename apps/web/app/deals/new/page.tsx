@@ -41,9 +41,8 @@ const DEAL_TYPE_OPTIONS = [
 ] as const;
 
 const TOKEN_OPTIONS = [
-  { label: 'USDC', value: 'USDC' },
   { label: 'SOL', value: 'SOL' },
-  { label: 'SPL Token', value: 'SPL_TOKEN' },
+  { label: 'USDC', value: 'USDC' },
 ] as const;
 
 function riskVariant(level?: string) {
@@ -78,7 +77,7 @@ export default function CreateDealPage() {
       description: '',
       type: 'freelance_service',
       amount: '100',
-      token: 'USDC',
+      token: 'SOL',
       deadline: '',
       sellerWallet: '',
     },
@@ -93,7 +92,6 @@ export default function CreateDealPage() {
     <AuthGate>
       <AppShell
         title="Tạo deal mới"
-        subtitle="Điền ngắn gọn điều khoản chính và kiểm tra AI trước khi publish."
         actions={
           <Link href="/dashboard">
             <Button variant="ghost">Quay lại dashboard</Button>
@@ -206,7 +204,7 @@ export default function CreateDealPage() {
             <CardContent className="space-y-4">
               {aiSummary ? (
                 <>
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={riskVariant(aiSummary.risk.level)}>
                         {aiSummary.risk.level ?? 'unknown'}
@@ -217,16 +215,16 @@ export default function CreateDealPage() {
                       </Badge>
                     </div>
                     {aiSummary.risk.recommendation ? (
-                      <p className="mt-3 text-sm leading-6 text-slate-200">
+                      <p className="mt-3 text-sm leading-relaxed text-zinc-300">
                         {aiSummary.risk.recommendation}
                       </p>
                     ) : null}
                   </div>
 
                   {textList(termRecord?.summary).length ? (
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="mb-2 text-sm font-medium text-slate-100">Tóm tắt</p>
-                      <div className="space-y-2 text-sm text-slate-300">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                      <p className="mb-2 text-sm font-medium text-zinc-100">Tóm tắt</p>
+                      <div className="space-y-2 text-sm text-zinc-400">
                         {textList(termRecord?.summary).map((item, index) => (
                           <p key={index}>{item}</p>
                         ))}
@@ -235,16 +233,16 @@ export default function CreateDealPage() {
                   ) : null}
 
                   {objectList(termRecord?.deliverables).length ? (
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="mb-3 text-sm font-medium text-slate-100">Deliverables</p>
-                      <div className="space-y-3">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                      <p className="mb-3 text-sm font-medium text-zinc-100">Deliverables</p>
+                      <div className="space-y-2">
                         {objectList(termRecord?.deliverables).map((item, index) => (
-                          <div key={index} className="rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2">
-                            <p className="text-sm text-slate-100">
+                          <div key={index} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+                            <p className="text-sm text-zinc-200">
                               {String(item.description ?? item.name ?? `Deliverable ${index + 1}`)}
                             </p>
                             {item.deadline ? (
-                              <p className="mt-1 text-xs text-slate-400">Deadline: {String(item.deadline)}</p>
+                              <p className="mt-1 text-xs text-zinc-500">Deadline: {String(item.deadline)}</p>
                             ) : null}
                           </div>
                         ))}
@@ -253,16 +251,16 @@ export default function CreateDealPage() {
                   ) : null}
 
                   {objectList(termRecord?.milestones).length ? (
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="mb-3 text-sm font-medium text-slate-100">Milestones</p>
-                      <div className="space-y-3">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                      <p className="mb-3 text-sm font-medium text-zinc-100">Milestones</p>
+                      <div className="space-y-2">
                         {objectList(termRecord?.milestones).map((item, index) => (
-                          <div key={index} className="rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2">
-                            <p className="text-sm text-slate-100">
+                          <div key={index} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+                            <p className="text-sm text-zinc-200">
                               {String(item.name ?? `Milestone ${index + 1}`)}
                             </p>
                             {item.description ? (
-                              <p className="mt-1 text-xs text-slate-400">{String(item.description)}</p>
+                              <p className="mt-1 text-xs text-zinc-500">{String(item.description)}</p>
                             ) : null}
                           </div>
                         ))}
@@ -271,18 +269,18 @@ export default function CreateDealPage() {
                   ) : null}
 
                   {objectList(scamRecord?.flags).length ? (
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="mb-3 text-sm font-medium text-slate-100">Cờ rủi ro</p>
-                      <div className="space-y-3">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                      <p className="mb-3 text-sm font-medium text-zinc-100">Cờ rủi ro</p>
+                      <div className="space-y-2">
                         {objectList(scamRecord?.flags).map((flag, index) => (
-                          <div key={index} className="rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2">
+                          <div key={index} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant={riskVariant(String(flag.severity ?? 'medium'))}>
                                 {String(flag.severity ?? 'medium')}
                               </Badge>
                               <Badge variant="muted">{String(flag.type ?? 'flag')}</Badge>
                             </div>
-                            <p className="mt-2 text-sm leading-6 text-slate-200">
+                            <p className="mt-2 text-sm leading-relaxed text-zinc-300">
                               {String(flag.description ?? '')}
                             </p>
                           </div>

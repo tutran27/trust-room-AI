@@ -13,6 +13,8 @@ import { apiFetch, setToken, getToken } from '../lib/api-client';
 import type { AuthResult, NonceResult, SessionUser } from '../lib/api-types';
 import { getDemoAddress, signAuthMessage, type WalletKind } from '../lib/wallet';
 
+const WALLET_KIND_KEY = 'trustroom_wallet_kind';
+
 interface AuthState {
   address: string | null;
   user: SessionUser | null;
@@ -36,6 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = getToken();
     if (!token) return;
+    // Restore walletKind from localStorage
+    const storedKind = localStorage.getItem(WALLET_KIND_KEY);
+    if (storedKind === 'phantom' || storedKind === 'demo') {
+      setWalletKind(storedKind);
+    }
     apiFetch<SessionUser>('/auth/session')
       .then((session) => {
         setUser(session);
@@ -44,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         setToken(null);
+        localStorage.removeItem(WALLET_KIND_KEY);
       });
   }, []);
 
@@ -73,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAddress(result.walletAddress);
       setUser({ wallet: result.walletAddress, userId: result.userId });
       setStatus('authenticated');
+      localStorage.setItem(WALLET_KIND_KEY, kind);
     } catch (err) {
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Failed to connect wallet.');
@@ -84,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setAddress(null);
     setStatus('idle');
+    localStorage.removeItem(WALLET_KIND_KEY);
   }, []);
 
   const value = useMemo<AuthState>(

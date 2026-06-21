@@ -25,16 +25,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <CardTitle>Đăng nhập để tiếp tục</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-slate-300">
-              Demo hiện hỗ trợ ví nội bộ để bạn chạy full flow mà không cần Phantom. Nếu máy bạn có
-              Phantom, bạn cũng có thể dùng ví thật.
-            </p>
             {error ? <Alert variant="danger" title="Không thể xác thực">{error}</Alert> : null}
             <div className="flex flex-wrap gap-3">
-              <Button onClick={() => connect('demo')}>Dùng demo wallet</Button>
-              <Button variant="secondary" onClick={() => connect('phantom')}>
-                Kết nối Phantom
-              </Button>
+              <Button onClick={() => connect('phantom')}>Kết nối Phantom</Button>
+              <Button variant="secondary" onClick={() => connect('demo')}>Demo wallet</Button>
             </div>
           </CardContent>
         </Card>

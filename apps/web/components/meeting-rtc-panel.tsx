@@ -471,9 +471,6 @@ export function MeetingRtcPanel({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <CardTitle className="text-xl">{title}</CardTitle>
-            <p className="mt-1 text-sm text-slate-400">
-              Ưu tiên hiển thị call room lớn để dễ quan sát ngữ cảnh trong lúc transcript đang chạy.
-            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant={status === 'connected' ? 'success' : status === 'error' ? 'danger' : 'muted'}>
@@ -490,13 +487,7 @@ export function MeetingRtcPanel({
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {status === 'connecting' ? <Skeleton className="h-[520px] rounded-[28px]" /> : null}
-
-        {status === 'connected' && !showDeviceWarning ? (
-          <Alert variant="success" title="Call room đã kết nối">
-            RTC đang hoạt động ổn định.
-          </Alert>
-        ) : null}
+        {status === 'connecting' ? <Skeleton className="h-[420px] rounded-[28px]" /> : null}
 
         {status === 'error' ? (
           <Alert variant="danger" title="Không thể mở call room">
@@ -523,7 +514,7 @@ export function MeetingRtcPanel({
                 className="overflow-hidden rounded-[30px] border border-cyan-500/20 bg-[linear-gradient(180deg,rgba(5,10,20,0.55),rgba(2,6,16,0.9))] transition-all duration-300"
                 style={buildSpeakingGlowStyle(localAudioActivity.level, micEnabled)}
               >
-                <div ref={localVideoRef} className="aspect-[16/9] min-h-[520px] w-full bg-slate-950" />
+                <div ref={localVideoRef} className="aspect-[16/9] h-[420px] w-full bg-slate-950" />
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
                   <div className="flex items-center gap-3">
                     <MicActivityBadge level={localAudioActivity.level} enabled={micEnabled} />
@@ -548,8 +539,7 @@ export function MeetingRtcPanel({
               <div className="rounded-[30px] border border-white/10 bg-slate-950/50 p-4">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-slate-100">Người khác trong room</p>
-                    <p className="text-xs text-slate-400">Video và audio remote sẽ đổ vào đây.</p>
+                    <p className="text-sm font-medium text-slate-100">Remote</p>
                   </div>
                   <Badge variant={remoteParticipants.length ? 'info' : 'muted'}>
                     {remoteParticipants.length} remote

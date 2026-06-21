@@ -30,5 +30,9 @@ const VARIANT_BY_STATUS: Record<string, 'default' | 'success' | 'warning' | 'dan
 };
 
 export function StatusBadge({ value }: { value: string }) {
-  return <Badge variant={VARIANT_BY_STATUS[value] ?? 'muted'}>{titleCaseStatus(value)}</Badge>;
+  return (
+    <Badge variant={VARIANT_BY_STATUS[value] ?? 'muted'}>
+      {titleCaseStatus(value)}
+    </Badge>
+  );
 }
