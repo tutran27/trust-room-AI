@@ -3,22 +3,29 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../lib/api-client';
 import type {
+  AgoraTokenResult,
   Deal,
   Dispute,
   Escrow,
   EscrowActionResult,
   EvidenceRecord,
+  MeetingInviteRecord,
+  MeetingRiskEventRecord,
+  MeetingSessionRecord,
+  MeetingSttStateRecord,
+  MeetingTranscriptRecord,
   NotificationRecord,
   Paginated,
   ReputationRecord,
 } from '../lib/api-types';
 
 // ── Deals ──────────────────────────────────────────────
-export function useDeals(status?: string) {
+export function useDeals(status?: string, enabled = true) {
   return useQuery({
     queryKey: ['deals', status ?? 'all'],
     queryFn: () =>
       apiFetch<Paginated<Deal>>(`/deals${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+    enabled,
   });
 }
 
@@ -165,11 +172,200 @@ export function useResolveDispute(disputeId: string) {
 }
 
 // ── Notifications ──────────────────────────────────────
-export function useNotifications() {
+export function useNotifications(enabled = true) {
   return useQuery({
     queryKey: ['notifications'],
     queryFn: () => apiFetch<NotificationRecord[]>('/notifications'),
     refetchInterval: 20_000,
+    enabled,
+  });
+}
+
+// ── Meetings ───────────────────────────────────────────────────────────────
+export function useMeetingsByDeal(dealId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['meetings', 'deal', dealId],
+    queryFn: () => apiFetch<MeetingSessionRecord[]>(`/meetings/deal/${dealId}`),
+    enabled: enabled && Boolean(dealId),
+  });
+}
+
+export function useMeeting(id: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['meeting', id],
+    queryFn: () => apiFetch<MeetingSessionRecord>(`/meetings/${id}`),
+    enabled: enabled && Boolean(id),
+  });
+}
+
+export function useCreateMeeting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { dealId: string; title: string; scheduledAt?: string }) =>
+      apiFetch<MeetingSessionRecord>('/meetings', { method: 'POST', body: input }),
+    onSuccess: (meeting) => {
+      qc.invalidateQueries({ queryKey: ['meetings', 'deal', meeting.dealId] });
+      qc.setQueryData(['meeting', meeting.id], meeting);
+    },
+  });
+}
+
+export function useUpdateMeetingStatus(meetingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { status: 'Scheduled' | 'Active' | 'Ended' }) =>
+      apiFetch<MeetingSessionRecord>(`/meetings/${meetingId}/status`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: (meeting) => {
+      qc.setQueryData(['meeting', meetingId], meeting);
+      qc.invalidateQueries({ queryKey: ['meetings', 'deal', meeting.dealId] });
+    },
+  });
+}
+
+export function useCreateMeetingInvite(meetingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      walletAddress?: string;
+      role: 'buyer' | 'seller' | 'arbiter' | 'guest';
+      maxUses?: number;
+      expiresAt: string;
+    }) =>
+      apiFetch<MeetingInviteRecord>(`/meetings/${meetingId}/invites`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['meeting', meetingId] }),
+  });
+}
+
+export function useJoinMeetingByToken() {
+  return useMutation({
+    mutationFn: (input: { token: string }) =>
+      apiFetch<MeetingInviteRecord>('/meetings/join', { method: 'POST', body: input }),
+  });
+}
+
+export function useAddMeetingTranscript(meetingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      participantId?: string;
+      speakerLabel: string;
+      content: string;
+      confidence?: number;
+      startTime: number;
+      endTime?: number;
+      language?: string;
+    }) =>
+      apiFetch<MeetingTranscriptRecord>(`/meetings/${meetingId}/transcripts`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['meeting-transcripts', meetingId] });
+      qc.invalidateQueries({ queryKey: ['meeting-risk-events', meetingId] });
+      qc.invalidateQueries({ queryKey: ['meeting', meetingId] });
+    },
+  });
+}
+
+export function useAddMeetingTranslation(meetingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      transcriptId: string;
+      targetLanguage: string;
+      content: string;
+      provider?: string;
+    }) =>
+      apiFetch(`/meetings/${meetingId}/translations`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['meeting-transcripts', meetingId] });
+      qc.invalidateQueries({ queryKey: ['meeting', meetingId] });
+    },
+  });
+}
+
+export function useMeetingTranscripts(meetingId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['meeting-transcripts', meetingId],
+    queryFn: () => apiFetch<MeetingTranscriptRecord[]>(`/meetings/${meetingId}/transcripts`),
+    enabled: enabled && Boolean(meetingId),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useMeetingSttState(meetingId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['meeting-stt-state', meetingId],
+    queryFn: () => apiFetch<MeetingSttStateRecord>(`/meetings/${meetingId}/stt`),
+    enabled: enabled && Boolean(meetingId),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useStartMeetingStt(meetingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      languages?: string[];
+      targetLanguages?: string[];
+      maxIdleTime?: number;
+      subscribeAudioUids?: string[];
+      enableTranslation?: boolean;
+    }) =>
+      apiFetch<MeetingSttStateRecord>(`/meetings/${meetingId}/stt/start`, {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['meeting-stt-state', meetingId] });
+    },
+  });
+}
+
+export function useStopMeetingStt(meetingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<MeetingSttStateRecord>(`/meetings/${meetingId}/stt/stop`, {
+        method: 'POST',
+        body: {},
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['meeting-stt-state', meetingId] });
+    },
+  });
+}
+
+export function useMeetingRiskEvents(meetingId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['meeting-risk-events', meetingId],
+    queryFn: () => apiFetch<MeetingRiskEventRecord[]>(`/meetings/${meetingId}/risk-events`),
+    enabled: enabled && Boolean(meetingId),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useAgoraToken(
+  meetingId: string | null,
+  input: { uid: number; role?: 1 | 2; expiry?: number },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['meeting-agora-token', meetingId, input.uid, input.role ?? 1, input.expiry ?? 3600],
+    queryFn: () =>
+      apiFetch<AgoraTokenResult>(
+        `/meetings/${meetingId}/agora-token?uid=${input.uid}&role=${input.role ?? 1}&expiry=${input.expiry ?? 3600}`,
+      ),
+    enabled: enabled && Boolean(meetingId),
   });
 }
 

@@ -12,8 +12,9 @@ import { formatAmount } from '../../lib/format';
 import { shortAddress } from '../../lib/wallet';
 
 export default function DashboardPage() {
-  const { address } = useAuth();
-  const deals = useDeals();
+  const { address, status } = useAuth();
+  const isAuthed = status === 'authenticated';
+  const deals = useDeals(undefined, isAuthed);
   const reputation = useReputation(address);
   const leaderboard = useLeaderboard();
 

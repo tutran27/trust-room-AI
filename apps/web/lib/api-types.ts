@@ -104,6 +104,108 @@ export interface ReputationRecord {
   lastUpdated: string;
 }
 
+export interface MeetingParticipantRecord {
+  id: string;
+  sessionId: string;
+  walletAddress: string;
+  role: 'buyer' | 'seller' | 'arbiter' | 'guest';
+  agoraUid: number | null;
+  joinedAt: string;
+  leftAt: string | null;
+  isActive: boolean;
+}
+
+export interface MeetingInviteRecord {
+  id: string;
+  sessionId: string;
+  walletAddress: string | null;
+  role: 'buyer' | 'seller' | 'arbiter' | 'guest';
+  token: string;
+  status: 'Pending' | 'Accepted' | 'Expired' | 'Revoked';
+  maxUses: number;
+  usedCount: number;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MeetingTranslationRecord {
+  id: string;
+  transcriptId: string;
+  sessionId: string;
+  targetLanguage: string;
+  content: string;
+  provider: string;
+  cacheKey: string;
+  createdAt: string;
+}
+
+export interface MeetingRiskEventRecord {
+  id: string;
+  sessionId: string;
+  transcriptId: string | null;
+  type: string;
+  severity: string;
+  description: string;
+  evidence: unknown;
+  createdAt: string;
+}
+
+export interface MeetingTranscriptRecord {
+  id: string;
+  sessionId: string;
+  participantId: string | null;
+  speakerLabel: string;
+  content: string;
+  confidence: number | null;
+  startTime: number;
+  endTime: number | null;
+  language: string;
+  createdAt: string;
+  translations?: MeetingTranslationRecord[];
+  riskEvents?: MeetingRiskEventRecord[];
+}
+
+export interface MeetingSttStateRecord {
+  enabled: boolean;
+  mode: 'demo_manual' | 'asr_only' | 'asr_translate';
+  status:
+    | 'idle'
+    | 'starting'
+    | 'running'
+    | 'fallback_asr_only'
+    | 'stopping'
+    | 'error';
+  agentId: string | null;
+  pusherUid: number | null;
+  languages: string[];
+  targetLanguages: string[];
+  fallbackReason?: string | null;
+}
+
+export interface MeetingSessionRecord {
+  id: string;
+  dealId: string;
+  title: string;
+  status: 'Scheduled' | 'Active' | 'Ended';
+  startedAt: string | null;
+  endedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  participants?: MeetingParticipantRecord[];
+  invites?: MeetingInviteRecord[];
+  transcripts?: MeetingTranscriptRecord[];
+  riskEvents?: MeetingRiskEventRecord[];
+  _count?: { transcripts: number; invites: number };
+}
+
+export interface AgoraTokenResult {
+  token: string;
+  channel: string;
+  uid: number;
+  expiresAt: number;
+}
+
 export interface SessionUser {
   sub?: string;
   userId?: string;

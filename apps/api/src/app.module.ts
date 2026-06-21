@@ -12,6 +12,7 @@ import { ReputationModule } from './reputation/reputation.module';
 import { AgoraModule } from './agora/agora.module';
 import { AiModule } from './ai/ai.module';
 import { WebsocketModule } from './websocket/websocket.module';
+import { MeetingsModule } from './meetings/meetings.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { WebsocketModule } from './websocket/websocket.module';
     AgoraModule,
     AiModule,
     WebsocketModule,
+    MeetingsModule,
   ],
 })
 export class AppModule {}

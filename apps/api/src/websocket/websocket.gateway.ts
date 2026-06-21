@@ -185,6 +185,27 @@ export class WebsocketGateway
     }
   }
 
+  // ── Meeting room subscription ──
+  @SubscribeMessage('join_meeting')
+  handleJoinMeeting(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { meetingId: string; wallet?: string },
+  ) {
+    client.join(`meeting:${data.meetingId}`);
+    if (data.wallet) client.join(`user:${data.wallet}`);
+    this.logger.log(`Client ${client.id} joined meeting:${data.meetingId}`);
+    return { event: 'joined', data: { meetingId: data.meetingId } };
+  }
+
+  @SubscribeMessage('leave_meeting')
+  handleLeaveMeeting(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { meetingId: string },
+  ) {
+    client.leave(`meeting:${data.meetingId}`);
+    return { event: 'left', data: { meetingId: data.meetingId } };
+  }
+
   // ── Server-side emit helpers (called by services) ──
   emitDealUpdate(dealId: string, payload: Record<string, unknown>) {
     this.server.to(`deal:${dealId}`).emit('deal_update', {

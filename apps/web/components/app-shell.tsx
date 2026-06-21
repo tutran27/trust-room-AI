@@ -16,11 +16,13 @@ export function AppShell({
   title,
   subtitle,
   actions,
+  contentClassName,
   children,
 }: {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  contentClassName?: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -75,7 +77,7 @@ export function AppShell({
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className={`mx-auto max-w-7xl px-6 py-8 ${contentClassName ?? ''}`}>
         <div className="mb-8 flex flex-col gap-4 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>

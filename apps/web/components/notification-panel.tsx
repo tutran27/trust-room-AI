@@ -3,10 +3,12 @@
 import { Alert, Card, CardContent, CardHeader, CardTitle, Skeleton } from '@trustroom/ui';
 import { useNotifications } from '../hooks/use-api';
 import { formatRelativeTime } from '../lib/format';
+import { useAuth } from '../providers/auth-provider';
 import { StatusBadge } from './status-badge';
 
 export function NotificationPanel() {
-  const notifications = useNotifications();
+  const { status } = useAuth();
+  const notifications = useNotifications(status === 'authenticated');
 
   return (
     <Card>

@@ -103,6 +103,7 @@ model Deal {
   events       DealEvent[]
   escrow       Escrow?
   disputes     Dispute[]
+  meetings     MeetingSession[]
 
   @@index([status])
   @@index([updatedAt, id])
@@ -298,3 +299,144 @@ model Vote {
   @@unique([agoraId, wallet])
   @@index([agoraId])
 }
+
+// ─── Meeting Room ───────────────────────────────────────────────────
+
+enum MeetingStatus {
+  Scheduled
+  Active
+  Ended
+}
+
+enum MeetingParticipantRole {
+  buyer
+  seller
+  arbiter
+  guest
+}
+
+enum InviteStatus {
+  Pending
+  Accepted
+  Expired
+  Revoked
+}
+
+model MeetingSession {
+  id          String          @id @default(cuid())
+  dealId      String
+  title       String
+  status      MeetingStatus   @default(Scheduled)
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  deal        Deal            @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  participants MeetingParticipant[]
+  invites     MeetingInvite[]
+  transcripts MeetingTranscript[]
+  translations MeetingTranslation[]
+  riskEvents  MeetingRiskEvent[]
+
+  @@index([dealId])
+  @@index([status])
+}
+
+model MeetingParticipant {
+  id              String                @id @default(cuid())
+  sessionId       String
+  walletAddress   String
+  role            MeetingParticipantRole
+  agoraUid        Int?
+  joinedAt        DateTime              @default(now())
+  leftAt          DateTime?
+  isActive        Boolean               @default(true)
+
+  session         MeetingSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, walletAddress])
+  @@index([sessionId])
+  @@index([walletAddress])
+}
+
+model MeetingInvite {
+  id              String        @id @default(cuid())
+  sessionId       String
+  walletAddress   String?
+  role            MeetingParticipantRole @default(guest)
+  token           String        @unique
+  status          InviteStatus  @default(Pending)
+  maxUses         Int           @default(1)
+  usedCount       Int           @default(0)
+  expiresAt       DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  session         MeetingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([token])
+  @@index([walletAddress])
+}
+
+// ─── Transcript ─────────────────────────────────────────────────────
+
+model MeetingTranscript {
+  id              String   @id @default(cuid())
+  sessionId       String
+  participantId   String?
+  speakerLabel    String
+  content         String
+  confidence      Float?
+  startTime       Float
+  endTime         Float?
+  language        String   @default("vi")
+  createdAt       DateTime @default(now())
+
+  session         MeetingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  translations    MeetingTranslation[]
+  riskEvents      MeetingRiskEvent[]
+
+  @@index([sessionId, startTime])
+  @@index([sessionId])
+}
+
+// ─── Translation ────────────────────────────────────────────────────
+
+model MeetingTranslation {
+  id              String   @id @default(cuid())
+  transcriptId    String
+  sessionId       String
+  targetLanguage  String
+  content         String
+  provider        String   @default("ai")
+  cacheKey        String   @unique
+  createdAt       DateTime @default(now())
+
+  transcript      MeetingTranscript @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+  session         MeetingSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([transcriptId])
+  @@index([sessionId])
+}
+
+// ─── Meeting Risk Events ────────────────────────────────────────────
+
+model MeetingRiskEvent {
+  id              String   @id @default(cuid())
+  sessionId       String
+  transcriptId    String?
+  type            String
+  severity        String   @default("medium")
+  description     String
+  evidence        Json?
+  createdAt       DateTime @default(now())
+
+  session         MeetingSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  transcript      MeetingTranscript? @relation(fields: [transcriptId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([sessionId, type])
+}
+

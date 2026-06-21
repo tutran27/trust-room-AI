@@ -22,11 +22,13 @@ import {
   useAddEvidence,
   useCreateDispute,
   useCreateEscrow,
+  useCreateMeeting,
   useDeal,
   useDetectScam,
   useDispute,
   useEscrowByDeal,
   useFundEscrow,
+  useMeetingsByDeal,
   useInviteSeller,
   useRefundEscrow,
   useReleaseEscrow,
@@ -57,6 +59,8 @@ export default function DealDetailPage() {
   const inviteSeller = useInviteSeller(dealId ?? '');
   const updateDeal = useUpdateDeal(dealId ?? '');
   const createEscrow = useCreateEscrow();
+  const createMeeting = useCreateMeeting();
+  const meetingsQuery = useMeetingsByDeal(dealId, Boolean(dealId && address));
   const fundEscrow = useFundEscrow();
   const releaseEscrow = useReleaseEscrow();
   const refundEscrow = useRefundEscrow();
@@ -93,6 +97,11 @@ export default function DealDetailPage() {
             <Link href="/disputes">
               <Button variant="secondary">Xem disputes</Button>
             </Link>
+            {meetingsQuery.data?.[0] ? (
+              <Link href={`/meetings/${meetingsQuery.data[0].id}`}>
+                <Button>Vào meeting</Button>
+              </Link>
+            ) : null}
           </>
         }
       >
@@ -322,6 +331,58 @@ export default function DealDetailPage() {
             </div>
 
             <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Meeting room</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {meetingsQuery.isLoading ? (
+                    <Skeleton className="h-24 rounded-2xl" />
+                  ) : meetingsQuery.data?.length ? (
+                    <>
+                      {meetingsQuery.data.map((meeting) => (
+                        <div key={meeting.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-medium text-slate-100">{meeting.title}</p>
+                              <p className="text-xs text-slate-400">
+                                {meeting.status} • {meeting.participants?.length ?? 0} participant • created {formatRelativeTime(meeting.createdAt)}
+                              </p>
+                            </div>
+                            <Link href={`/meetings/${meeting.id}`}>
+                              <Button variant="secondary">Mở room</Button>
+                            </Link>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <Alert title="Chưa có meeting room">
+                        Tạo meeting riêng cho deal này để lấy invite link, participant list, transcript và Agora token.
+                      </Alert>
+                      <Button
+                        onClick={async () => {
+                          const meeting = await createMeeting.mutateAsync({
+                            dealId: deal.id,
+                            title: `${deal.title} - Meeting`,
+                          });
+                          router.push(`/meetings/${meeting.id}`);
+                        }}
+                        disabled={createMeeting.isPending}
+                      >
+                        Tạo meeting room
+                      </Button>
+                    </>
+                  )}
+                  {createMeeting.error ? (
+                    <Alert variant="danger" title="Không thể tạo meeting">
+                      {createMeeting.error instanceof Error ? createMeeting.error.message : 'Lỗi không xác định.'}
+                    </Alert>
+                  ) : null}
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader>
                   <CardTitle>Escrow demo</CardTitle>
