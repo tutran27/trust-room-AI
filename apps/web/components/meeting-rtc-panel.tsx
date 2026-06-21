@@ -119,6 +119,8 @@ export function MeetingRtcPanel({
     }
 
     let cancelled = false;
+    let effectClient: any = null;
+    let joinedChannel = false;
 
     async function joinRtc() {
       try {
@@ -139,6 +141,7 @@ export function MeetingRtcPanel({
         }
 
         const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+        effectClient = client;
         clientRef.current = client;
 
         client.on('user-published', async (user: any, mediaType: 'audio' | 'video') => {
@@ -232,6 +235,7 @@ export function MeetingRtcPanel({
         });
 
         await client.join(appId!, meetingId, token!, uid);
+        joinedChannel = true;
 
         const localDevices = await detectLocalMediaDevices();
         const warnings: string[] = [];
@@ -307,13 +311,15 @@ export function MeetingRtcPanel({
           localAudioTrackRef.current?.close();
           localVideoTrackRef.current?.stop();
           localVideoTrackRef.current?.close();
-          if (clientRef.current) {
-            await clientRef.current.leave();
+          if (effectClient && joinedChannel) {
+            await effectClient.leave();
           }
         } catch {
           // ignore cleanup failures
         } finally {
-          clientRef.current = null;
+          if (clientRef.current === effectClient) {
+            clientRef.current = null;
+          }
           localAudioTrackRef.current = null;
           localVideoTrackRef.current = null;
           remoteUsersRef.current.clear();
