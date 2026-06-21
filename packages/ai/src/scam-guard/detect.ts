@@ -6,20 +6,33 @@ import {
 } from '@trustroom/types';
 import { SCAM_RULES, type ScamRule } from './rules.js';
 
-/** Normalize transcript text for keyword matching (lowercase, collapse whitespace). */
+/**
+ * Normalize transcript text for matching: lowercase, fold Vietnamese diacritics to
+ * ASCII, strip the đ/Đ ligature, and collapse whitespace. Folding lets a single
+ * accent-free rule (`release truoc`) match the accented transcript (`release trước`),
+ * which is essential for VI / EN / mixed STT output.
+ */
 export function normalize(text: string): string {
-  return text.toLowerCase().replace(/\s+/g, ' ').trim();
+  return (text ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // strip combining diacritical marks
+    .replace(/[đĐ]/g, 'd') // đ / Đ ligature → d
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export interface RuleHit {
   rule: ScamRule;
+  /** The keyword that matched, the source of a regex match, or null. */
   matchedKeyword: string | null;
 }
 
 /**
  * Run the deterministic rule layer over a single transcript chunk.
  * Deal state gates state-sensitive rules (e.g. early-release is only risky before
- * delivery is submitted).
+ * delivery is submitted). Matches keywords (substring) and regex patterns; the
+ * first trigger per rule wins (one hit per rule).
  */
 export function runRules(text: string, dealStatus: DealStatus): RuleHit[] {
   const normalized = normalize(text);
@@ -31,11 +44,21 @@ export function runRules(text: string, dealStatus: DealStatus): RuleHit[] {
     if (rule.invalidBeforeStates?.includes(dealStatus)) {
       continue;
     }
+
+    let matchedKeyword: string | null = null;
+
     if (rule.keywords?.length) {
       const matched = rule.keywords.find((k) => normalized.includes(normalize(k)));
-      if (matched) {
-        hits.push({ rule, matchedKeyword: matched });
-      }
+      if (matched) matchedKeyword = matched;
+    }
+
+    if (!matchedKeyword && rule.patterns?.length) {
+      const matched = rule.patterns.find((p) => p.test(normalized));
+      if (matched) matchedKeyword = matched.source;
+    }
+
+    if (matchedKeyword !== null) {
+      hits.push({ rule, matchedKeyword });
     }
   }
   return hits;
@@ -49,13 +72,13 @@ export interface RiskAssessment {
 
 const LEVEL_ORDER: RiskLevel[] = ['low', 'medium', 'high', 'critical'];
 
-function maxLevel(a: RiskLevel, b: RiskLevel): RiskLevel {
+export function maxLevel(a: RiskLevel, b: RiskLevel): RiskLevel {
   return LEVEL_ORDER.indexOf(a) >= LEVEL_ORDER.indexOf(b) ? a : b;
 }
 
 /**
  * Aggregate rule hits into a final score/level. This is the conversation-risk
- * component only; the full aggregator (technical brief §5.7) also folds in
+ * component only; the full aggregator (see `aggregator.ts`) also folds in
  * wallet risk, escrow-state risk, evidence risk, and a repetition penalty.
  *
  * The level is the MAX of the score-derived level and the highest per-rule
@@ -87,6 +110,11 @@ export interface TranscriptAnalysis {
  * rule layer over a transcript chunk and aggregates the result into a flat
  * `{ hits, score, level, intents }` shape. `intents` is the de-duplicated list of
  * scam intents that fired, in rule-catalog order.
+ *
+ * This is the lightweight (conversation-only) entrypoint. For full-context
+ * detection — wallet address parsing, escrow-state/evidence/wallet risk, the LLM
+ * intent classifier, and repetition penalty — use `analyzeMessage` /
+ * `analyzeMessageSync` from `analyze.ts`.
  */
 export function analyzeTranscript(
   text: string,

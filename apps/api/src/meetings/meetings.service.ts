@@ -10,9 +10,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { analyzeTranscript } from '@trustroom/ai';
+import { analyzeMessage, getLLMClient } from '@trustroom/ai';
 import { Prisma } from '@trustroom/db';
-import { DealStatus, type DealStatus as CanonicalDealStatus } from '@trustroom/types';
+import {
+  DealStatus,
+  type DealStatus as CanonicalDealStatus,
+  type ScamIntent,
+} from '@trustroom/types';
 import { RtcRole, RtcTokenBuilder } from 'agora-token';
 import * as crypto from 'crypto';
 import { PrismaService } from '../database/prisma.service';
@@ -70,6 +74,7 @@ export interface MeetingSttState {
 @Injectable()
 export class MeetingsService {
   private readonly logger = new Logger(MeetingsService.name);
+  private readonly llm = getLLMClient();
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -297,8 +302,17 @@ export class MeetingsService {
     const session = await this.prisma.meetingSession.findUnique({
       where: { id: data.sessionId },
       include: {
-        deal: { select: { status: true } },
-        participants: { select: { id: true } },
+        deal: {
+          select: {
+            id: true,
+            status: true,
+            participants: { select: { walletAddress: true, role: true } },
+            escrow: { select: { status: true, buyerAddress: true, sellerAddress: true } },
+          },
+        },
+        participants: {
+          select: { id: true, walletAddress: true, role: true },
+        },
       },
     });
     if (!session) {
@@ -330,23 +344,52 @@ export class MeetingsService {
     });
 
     const normalizedStatus = this.toCanonicalDealStatus(session.deal.status);
-    const analysis = analyzeTranscript(data.content, normalizedStatus);
+    const participant = data.participantId
+      ? session.participants.find((item) => item.id === data.participantId) ?? null
+      : null;
+    const context = await this.loadMeetingScamContext(session, data.sessionId);
+    const analysis = await analyzeMessage(
+      {
+        message: data.content,
+        dealStatus: normalizedStatus,
+        dealId: session.deal.id,
+        speakerId: participant?.walletAddress ?? data.speakerLabel,
+        speakerRole: this.resolveMeetingSpeakerRole(participant?.role, data.speakerLabel),
+        timestamp: new Date(transcript.createdAt).toISOString(),
+        escrowState: session.deal.escrow?.status,
+        knownAddresses: context.knownAddresses,
+        priorIntents: context.priorIntents,
+        recentMessages: context.recentMessages,
+      },
+      this.llm,
+    );
 
-    if (analysis.hits.length > 0) {
+    const groupedSignals = this.groupMeetingRiskSignals(analysis.signals);
+
+    if (groupedSignals.length > 0) {
       const createdRiskEvents = await Promise.all(
-        analysis.hits.map((hit) =>
+        groupedSignals.map((signal) =>
           this.prisma.meetingRiskEvent.create({
             data: {
               sessionId: data.sessionId,
               transcriptId: transcript.id,
-              type: hit.rule.intent,
-              severity: hit.rule.riskLevel,
-              description: hit.rule.message,
+              type: signal.intent,
+              severity: signal.riskLevel,
+              description: signal.reason,
               evidence: {
-                ruleId: hit.rule.ruleId,
-                matchedKeyword: hit.matchedKeyword,
-                score: analysis.score,
-                level: analysis.level,
+                score: analysis.finalScore,
+                level: analysis.finalLevel,
+                confidence: signal.confidence,
+                suggestedAction: signal.suggestedAction,
+                source: signal.source,
+                escrowThreat: signal.escrowThreat,
+                message: data.content,
+                speakerLabel: data.speakerLabel,
+                speakerWallet: participant?.walletAddress ?? null,
+                timestamp: transcript.createdAt.toISOString(),
+                reasons: signal.mergedReasons,
+                sources: signal.mergedSources,
+                matchedKeyword: signal.evidence?.matchedKeyword ?? null,
               } as Prisma.InputJsonValue,
             },
           }),
@@ -1131,6 +1174,127 @@ export class MeetingsService {
       return status as CanonicalDealStatus;
     }
     return DealStatus.Negotiating;
+  }
+
+  private resolveMeetingSpeakerRole(
+    participantRole?: string | null,
+    speakerLabel?: string | null,
+  ): 'buyer' | 'seller' | 'ai' | 'system' | undefined {
+    if (participantRole === 'buyer' || participantRole === 'seller') {
+      return participantRole;
+    }
+
+    const normalizedSpeakerLabel = speakerLabel?.trim().toLowerCase() ?? '';
+    if (!normalizedSpeakerLabel) return undefined;
+    if (normalizedSpeakerLabel.includes('ai') || normalizedSpeakerLabel.includes('bot')) {
+      return 'ai';
+    }
+    if (normalizedSpeakerLabel.includes('system')) {
+      return 'system';
+    }
+    return undefined;
+  }
+
+  private async loadMeetingScamContext(
+    session: {
+      deal: {
+        id: string;
+        participants: Array<{ walletAddress: string; role: string }>;
+        escrow: {
+          status: string;
+          buyerAddress: string | null;
+          sellerAddress: string | null;
+        } | null;
+      };
+    },
+    sessionId: string,
+  ): Promise<{ knownAddresses: string[]; priorIntents: ScamIntent[]; recentMessages: string[] }> {
+    const knownAddresses = new Set<string>();
+    for (const participant of session.deal.participants) {
+      if (participant.walletAddress) knownAddresses.add(participant.walletAddress);
+    }
+    if (session.deal.escrow?.buyerAddress) knownAddresses.add(session.deal.escrow.buyerAddress);
+    if (session.deal.escrow?.sellerAddress) knownAddresses.add(session.deal.escrow.sellerAddress);
+
+    const [recentRiskEvents, recentTranscripts] = await Promise.all([
+      this.prisma.meetingRiskEvent.findMany({
+        where: { sessionId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { type: true },
+      }),
+      this.prisma.meetingTranscript.findMany({
+        where: { sessionId },
+        orderBy: { createdAt: 'desc' },
+        take: 12,
+        select: { content: true },
+      }),
+    ]);
+
+    return {
+      knownAddresses: Array.from(knownAddresses),
+      priorIntents: recentRiskEvents.map((item) => item.type as ScamIntent),
+      recentMessages: recentTranscripts.map((item) => item.content).reverse(),
+    };
+  }
+
+  private groupMeetingRiskSignals(
+    signals: Array<{
+      intent: string;
+      riskLevel: string;
+      score: number;
+      confidence: number;
+      reason: string;
+      suggestedAction: string;
+      source: string;
+      escrowThreat?: boolean;
+      evidence?: { matchedKeyword?: string | null };
+    }>,
+  ) {
+    const grouped = new Map<
+      string,
+      {
+        intent: string;
+        riskLevel: string;
+        score: number;
+        confidence: number;
+        reason: string;
+        suggestedAction: string;
+        source: string;
+        escrowThreat?: boolean;
+        evidence?: { matchedKeyword?: string | null };
+        mergedReasons: string[];
+        mergedSources: string[];
+      }
+    >();
+
+    for (const signal of signals) {
+      const existing = grouped.get(signal.intent);
+      if (!existing) {
+        grouped.set(signal.intent, {
+          ...signal,
+          mergedReasons: [signal.reason],
+          mergedSources: [signal.source],
+        });
+        continue;
+      }
+
+      existing.mergedReasons = Array.from(new Set([...existing.mergedReasons, signal.reason]));
+      existing.mergedSources = Array.from(new Set([...existing.mergedSources, signal.source]));
+
+      if (signal.score > existing.score || signal.confidence > existing.confidence) {
+        grouped.set(signal.intent, {
+          ...signal,
+          mergedReasons: existing.mergedReasons,
+          mergedSources: existing.mergedSources,
+        });
+      }
+    }
+
+    return Array.from(grouped.values()).map((signal) => ({
+      ...signal,
+      reason: signal.mergedReasons.join(' '),
+    }));
   }
 
   private parseAgoraPayload(rawText: string) {

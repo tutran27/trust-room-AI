@@ -24,8 +24,8 @@ import {
   useConfirmTerms,
   useCreateDispute,
   useCreateEscrow,
-  useSubmitDelivery,
   useCreateMeeting,
+  useSubmitDelivery,
   useDeal,
   useDetectScam,
   useDispute,
@@ -62,6 +62,53 @@ function riskVariant(level?: string) {
   if (normalized === 'medium') return 'warning' as const;
   if (normalized === 'low') return 'info' as const;
   return 'muted' as const;
+}
+
+function explainRiskIntent(intent?: string) {
+  switch (intent) {
+    case 'move_off_platform':
+      return {
+        title: 'Yêu cầu chuyển qua nền tảng khác',
+        explanation:
+          'Giải thích: Có thể đối phương đang cố đưa bạn ra ngoài hệ thống để né escrow, né log hội thoại và tăng rủi ro lừa đảo.',
+      };
+    case 'early_release_request':
+      return {
+        title: 'Yêu cầu release sớm',
+        explanation:
+          'Giải thích: Đối phương đang thúc bạn giải ngân trước khi hàng hóa, dịch vụ hoặc bằng chứng hoàn tất được xác minh.',
+      };
+    case 'external_wallet':
+      return {
+        title: 'Yêu cầu gửi sang ví ngoài escrow',
+        explanation:
+          'Giải thích: Ví này không nằm trong deal đã xác minh. Nếu chuyển tiền ra ngoài, bạn có thể mất toàn bộ lớp bảo vệ của escrow.',
+      };
+    case 'fake_payment_proof':
+      return {
+        title: 'Bằng chứng thanh toán chưa đáng tin',
+        explanation:
+          'Giải thích: Hệ thống phát hiện dấu hiệu dùng ảnh chụp, bill hoặc xác nhận mơ hồ thay cho thanh toán đã được kiểm chứng thật.',
+      };
+    case 'credential_request':
+      return {
+        title: 'Yêu cầu thông tin nhạy cảm',
+        explanation:
+          'Giải thích: Không ai hợp lệ được phép xin seed phrase, private key, OTP hoặc quyền truy cập ví của bạn.',
+      };
+    case 'time_pressure':
+      return {
+        title: 'Đang tạo áp lực thời gian',
+        explanation:
+          'Giải thích: Việc hối thúc quá nhanh thường nhằm khiến bạn bỏ qua bước xác minh quan trọng trước khi giao dịch.',
+      };
+    default:
+      return {
+        title: 'Phát hiện tín hiệu rủi ro',
+        explanation:
+          'Giải thích: Nội dung hội thoại có dấu hiệu bất thường, bạn nên kiểm tra kỹ điều khoản và bằng chứng trước khi tiếp tục.',
+      };
+  }
 }
 
 export default function DealDetailPage() {
@@ -106,7 +153,13 @@ export default function DealDetailPage() {
   const addEvidence = useAddEvidence(currentDispute.data?.id ?? '');
 
   const chatRiskSummary = useMemo(() => live.riskEvents[0] ?? null, [live.riskEvents]);
+  const liveRiskFeed = useMemo(() => live.riskEvents.slice(0, 8), [live.riskEvents]);
   const availableActions = deal ? DEAL_ACTION_OPTIONS[deal.status] ?? [] : [];
+  const sendCurrentChatMessage = () => {
+    if (!chatMessage.trim()) return;
+    live.sendChatMessage(chatMessage);
+    setChatMessage('');
+  };
 
   return (
     <AuthGate>
@@ -138,14 +191,14 @@ export default function DealDetailPage() {
             {dealQuery.error instanceof Error ? dealQuery.error.message : 'Deal không tồn tại.'}
           </Alert>
         ) : (
-          <div className="grid gap-6 2xl:grid-cols-[2.08fr_0.92fr]">
-            <div className="space-y-6">
+          <div className="grid gap-5 2xl:grid-cols-[1.96fr_0.64fr]">
+            <div className="space-y-6 2xl:contents">
               {/* Deal Overview Card */}
-              <Card className="overflow-hidden">
+              <Card className="overflow-hidden 2xl:order-2 2xl:col-start-2">
                 <CardHeader className="border-b border-white/[0.06] pb-5">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                  <div className="flex flex-col gap-4">
                     <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="hidden flex-wrap items-center gap-2">
                         {meetingsQuery.data?.[0] ? (
                           <Link href={`/meetings/${meetingsQuery.data[0].id}`}>
                             <Button>Vào meeting</Button>
@@ -169,7 +222,7 @@ export default function DealDetailPage() {
                         <CardTitle className="text-lg">Deal overview</CardTitle>
                       </div>
                     </div>
-                    <div className="grid gap-1.5 text-sm text-zinc-400 xl:text-right">
+                    <div className="grid gap-1.5 text-sm text-zinc-400">
                       <p>Buyer: <span className="font-mono text-zinc-300">{shortAddress(deal.buyerWallet, 5, 5)}</span></p>
                       <p>
                         Seller:{' '}
@@ -180,7 +233,7 @@ export default function DealDetailPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="grid gap-5 pt-6 xl:grid-cols-[1.2fr_0.8fr]">
+                <CardContent className="space-y-4 pt-6">
                   <div className="space-y-4">
                     <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
                       <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">Mô tả deal</p>
@@ -273,7 +326,7 @@ export default function DealDetailPage() {
               </Card>
 
               {/* Realtime + Scam Guard Card */}
-              <Card>
+              <Card className="2xl:order-1 2xl:col-start-1">
                 <CardHeader className="border-b border-white/[0.06] pb-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                     <div>
@@ -306,7 +359,7 @@ export default function DealDetailPage() {
                     </Alert>
                   ) : null}
 
-                  <div className="grid gap-4 xl:grid-cols-[1.18fr_0.82fr]">
+                  <div className="grid gap-4 xl:grid-cols-[1.52fr_0.48fr]">
                     <div className="space-y-4">
                       {/* Transcript */}
                       <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.03] p-4">
@@ -317,7 +370,7 @@ export default function DealDetailPage() {
                           </Badge>
                         </div>
 
-                        <div className="max-h-[540px] space-y-3 overflow-y-auto pr-1">
+                        <div className="max-h-[700px] space-y-3 overflow-y-auto pr-1">
                           {live.messages.length > 0 ? (
                             live.messages.map((message, index) => (
                               <div
@@ -335,7 +388,7 @@ export default function DealDetailPage() {
                               </div>
                             ))
                           ) : (
-                            <div className="flex min-h-[420px] items-center justify-center rounded-xl border border-dashed border-emerald-500/15 bg-white/[0.01] p-8 text-center">
+                            <div className="flex min-h-[560px] items-center justify-center rounded-xl border border-dashed border-emerald-500/15 bg-white/[0.01] p-8 text-center">
                               <div className="space-y-2">
                                 <p className="text-base font-medium text-zinc-200">Chưa có transcript realtime</p>
                                 <p className="text-sm leading-relaxed text-zinc-500">
@@ -351,22 +404,27 @@ export default function DealDetailPage() {
                       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
                         <div className="grid gap-3 xl:grid-cols-[1fr_auto]">
                           <Textarea
-                            rows={4}
+                            rows={3}
                             value={chatMessage}
                             onChange={(event) => setChatMessage(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' && !event.shiftKey) {
+                                event.preventDefault();
+                                sendCurrentChatMessage();
+                              }
+                            }}
                             placeholder="Nhập nội dung thương lượng..."
                           />
-                          <div className="flex flex-col gap-2 xl:w-[160px]">
+                          <div className="flex flex-col gap-2 xl:w-[124px]">
                             <Button
-                              onClick={() => {
-                                live.sendChatMessage(chatMessage);
-                                setChatMessage('');
-                              }}
+                              className="h-10 px-3 text-sm"
+                              onClick={sendCurrentChatMessage}
                               disabled={!chatMessage.trim()}
                             >
-                              Gửi chat
+                              Gửi nhanh
                             </Button>
                             <Button
+                              className="h-10 px-3 text-sm"
                               variant="secondary"
                               onClick={() => detectScam.mutate({ text: chatMessage })}
                               disabled={!chatMessage.trim() || detectScam.isPending}
@@ -380,7 +438,7 @@ export default function DealDetailPage() {
 
                     <div className="space-y-4">
                       {/* AI Monitor */}
-                      <div className="rounded-2xl border border-red-500/15 bg-red-500/[0.04] p-4">
+                      <div className="rounded-2xl border border-red-500/15 bg-red-500/[0.04] p-3.5">
                         <div className="mb-4 flex items-center justify-between gap-3">
                           <p className="text-sm font-medium text-zinc-100">AI monitor</p>
                           <Badge variant={chatRiskSummary ? riskVariant(chatRiskSummary.level) : 'muted'}>
@@ -388,19 +446,30 @@ export default function DealDetailPage() {
                           </Badge>
                         </div>
 
-                        {chatRiskSummary ? (
-                          <div className="space-y-3">
-                            <p className="text-sm leading-relaxed text-zinc-300">
-                              {chatRiskSummary.reasons.join(' • ')}
-                            </p>
-                            <div className="rounded-lg border border-red-500/10 bg-red-500/[0.04] px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-wider text-red-400/80">
-                                Trigger text
-                              </p>
-                              <p className="mt-1 text-sm text-zinc-200">
-                                {chatRiskSummary.triggerText}
-                              </p>
-                            </div>
+                        {liveRiskFeed.length ? (
+                          <div className="space-y-2">
+                            {liveRiskFeed.map((riskEvent, index) => (
+                              <div
+                                key={`${riskEvent.timestamp}-${index}`}
+                                className="rounded-xl border border-red-500/10 bg-red-500/[0.03] p-3"
+                              >
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                  <Badge variant={riskVariant(riskEvent.level)}>{riskEvent.level}</Badge>
+                                  <span className="text-[11px] text-zinc-500">
+                                    {formatRelativeTime(riskEvent.timestamp)}
+                                  </span>
+                                </div>
+                                <p className="text-sm font-semibold leading-relaxed text-zinc-100">
+                                  {explainRiskIntent(riskEvent.intents[0]).title}
+                                </p>
+                                <p className="mt-1 text-sm leading-relaxed text-zinc-300">
+                                  {explainRiskIntent(riskEvent.intents[0]).explanation}
+                                </p>
+                                <p className="hidden text-sm leading-relaxed text-zinc-200">
+                                  {riskEvent.reasons[0] ?? 'Phát hiện tín hiệu đáng ngờ trong hội thoại.'}
+                                </p>
+                              </div>
+                            ))}
                           </div>
                         ) : (
                           <Alert title="Chưa có cảnh báo">
@@ -444,9 +513,9 @@ export default function DealDetailPage() {
               </Card>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-6 2xl:contents">
               {/* Escrow Card */}
-              <Card>
+              <Card className="2xl:order-3 2xl:col-start-2">
                 <CardHeader className="pb-4">
                   <CardTitle>Escrow (Solana Devnet)</CardTitle>
                 </CardHeader>
@@ -677,7 +746,7 @@ export default function DealDetailPage() {
               </Card>
 
               {/* Dispute Card */}
-              <Card>
+              <Card className="2xl:order-4 2xl:col-start-2">
                 <CardHeader className="pb-4">
                   <CardTitle>Dispute flow</CardTitle>
                 </CardHeader>
@@ -737,29 +806,6 @@ export default function DealDetailPage() {
                 </CardContent>
               </Card>
 
-              {/* Event Timeline Card */}
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle>Event timeline</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {deal.events?.length ? (
-                    deal.events.map((event) => (
-                      <div key={event.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-zinc-100">{event.type}</p>
-                          <p className="text-[11px] text-zinc-500">{formatRelativeTime(event.createdAt)}</p>
-                        </div>
-                        <p className="mt-1 text-[11px] font-mono text-zinc-500">
-                          {shortAddress(event.actorWallet, 5, 5)}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-zinc-500">Chưa có timeline event.</p>
-                  )}
-                </CardContent>
-              </Card>
             </div>
           </div>
         )}

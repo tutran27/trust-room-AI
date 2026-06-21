@@ -61,11 +61,56 @@ export {
   aggregateRisk,
   analyzeTranscript,
   normalize,
+  maxLevel,
   type RuleHit,
   type RiskAssessment,
   type TranscriptAnalysis,
 } from './scam-guard/detect.js';
-export { SCAM_RULES, type ScamRule } from './scam-guard/rules.js';
+export { SCAM_RULES, suggestedActionFor, type ScamRule } from './scam-guard/rules.js';
+
+// Scam Guard — full-context multi-layer engine (rules + wallet/link parser + LLM
+// intent classifier + wallet/escrow-state/evidence risk + repetition penalty).
+export {
+  analyzeMessage,
+  analyzeMessageSync,
+  type ScamAnalysisInput,
+  type ScamAnalysisResult,
+} from './scam-guard/analyze.js';
+export {
+  aggregate,
+  ESCROW_THREAT_INTENTS,
+  type RiskSignal,
+  type AggregateInput,
+  type AggregateResult,
+  type ComponentRisk,
+  type SignalSource,
+  type UiAction,
+} from './scam-guard/aggregator.js';
+export {
+  parseWalletsAndLinks,
+  type WalletParseInput,
+  type WalletParseResult,
+  type DetectedAddress,
+  type DetectedUrl,
+} from './scam-guard/wallet-parser.js';
+export {
+  scoreWalletRisk,
+  type WalletRiskProfile,
+  type WalletRiskResult,
+} from './scam-guard/wallet-risk.js';
+export { scoreEscrowStateRisk, type EscrowStateRisk } from './scam-guard/deal-state.js';
+export {
+  scoreEvidenceRisk,
+  type EvidenceItem,
+  type EvidenceKind,
+  type EvidenceRiskInput,
+  type EvidenceRiskResult,
+} from './scam-guard/evidence-risk.js';
+export {
+  classifyIntents,
+  type LlmIntentSignal,
+  type LlmClassifierContext,
+} from './scam-guard/llm-classifier.js';
 
 // Re-exported shared helper for convenience
 export { scoreToLevel } from '@trustroom/types';

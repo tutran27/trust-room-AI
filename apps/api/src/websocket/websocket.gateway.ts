@@ -10,8 +10,8 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { analyzeTranscript } from '@trustroom/ai';
-import { type DealStatus } from '@trustroom/types';
+import { analyzeMessage, getLLMClient } from '@trustroom/ai';
+import { type DealStatus, type ScamIntent } from '@trustroom/types';
 import { NotificationsService } from '../notifications/notifications.service';
 
 interface ChatMessagePayload {
@@ -32,6 +32,9 @@ export class WebsocketGateway
   server!: Server;
 
   private readonly logger = new Logger(WebsocketGateway.name);
+  // Groq-first LLM client; the Scam Guard degrades to the deterministic layers
+  // when no key is configured, so this is always safe to hold.
+  private readonly llm = getLLMClient();
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -95,18 +98,25 @@ export class WebsocketGateway
   }
 
   private async runScamGuard(data: ChatMessagePayload, timestamp: string) {
-    let dealStatus: DealStatus = 'Negotiating' as DealStatus;
-    try {
-      const deal = await this.prisma.deal.findUnique({
-        where: { id: data.dealId },
-        select: { status: true },
-      });
-      if (deal) dealStatus = deal.status as unknown as DealStatus;
-    } catch {
-      // default to Negotiating if the deal can't be loaded
-    }
+    const context = await this.loadDealContext(data.dealId);
 
-    const analysis = analyzeTranscript(data.message, dealStatus);
+    // Full-context analysis: rules + wallet/link parser + (optional) LLM intent
+    // classifier + wallet/escrow-state/evidence risk + repetition penalty.
+    const analysis = await analyzeMessage(
+      {
+        message: data.message,
+        dealStatus: context.dealStatus,
+        dealId: data.dealId,
+        speakerId: data.sender,
+        speakerRole: data.speakerRole ?? 'buyer',
+        timestamp,
+        escrowState: context.escrowState,
+        knownAddresses: context.knownAddresses,
+        priorIntents: context.priorIntents,
+        recentMessages: context.recentMessages,
+      },
+      this.llm,
+    );
 
     // Persist the transcript chunk to the deal timeline (best-effort).
     void this.persistEvent(data.dealId, data.sender, 'transcript.chunk', {
@@ -114,15 +124,26 @@ export class WebsocketGateway
       speakerRole: data.speakerRole ?? 'buyer',
     });
 
-    if (analysis.hits.length === 0) return;
+    if (analysis.signals.length === 0) return;
 
-    const reasons = analysis.hits.map((h) => h.rule.message);
     const payload = {
       dealId: data.dealId,
-      score: analysis.score,
-      level: analysis.level,
+      score: analysis.finalScore,
+      level: analysis.finalLevel,
       intents: analysis.intents,
-      reasons,
+      reasons: analysis.reasons,
+      components: {
+        conversation: analysis.conversationRisk,
+        wallet: analysis.walletRisk,
+        escrowState: analysis.escrowStateRisk,
+        evidence: analysis.evidenceRisk,
+        repetition: analysis.repetitionPenalty,
+      },
+      signals: analysis.signals,
+      suggestedAction: analysis.suggestedAction,
+      lockRelease: analysis.lockRelease,
+      blockMessage: analysis.blockMessage,
+      uiAction: analysis.uiAction,
       triggerText: data.message,
       speaker: data.sender,
       timestamp,
@@ -133,13 +154,93 @@ export class WebsocketGateway
     void this.persistEvent(data.dealId, data.sender, 'risk.detected', payload);
 
     // Notify the deal participants of a high/critical alert.
-    if (analysis.level === 'high' || analysis.level === 'critical') {
+    if (analysis.finalLevel === 'high' || analysis.finalLevel === 'critical') {
       void this.notifyParticipants(
         data.dealId,
-        `Scam Guard ${analysis.level} alert`,
-        reasons[0] ?? 'Suspicious activity detected in the deal room.',
+        `Scam Guard ${analysis.finalLevel} alert`,
+        analysis.suggestedAction,
       );
     }
+  }
+
+  /**
+   * Load the rich deal context the Scam Guard needs: current status, escrow state,
+   * the verified wallet set (so a non-deal address in chat reads as "external"),
+   * and the intents already flagged earlier in this deal (repetition penalty).
+   * Every lookup is best-effort — a DB hiccup degrades gracefully to defaults.
+   */
+  private async loadDealContext(dealId: string): Promise<{
+    dealStatus: DealStatus;
+    escrowState?: string;
+    knownAddresses: string[];
+    priorIntents: ScamIntent[];
+    recentMessages: string[];
+  }> {
+    let dealStatus: DealStatus = 'Negotiating' as DealStatus;
+    let escrowState: string | undefined;
+    const knownAddresses = new Set<string>();
+
+    try {
+      const deal = await this.prisma.deal.findUnique({
+        where: { id: dealId },
+        select: {
+          status: true,
+          participants: { select: { walletAddress: true } },
+          escrow: { select: { status: true, buyerAddress: true, sellerAddress: true } },
+        },
+      });
+      if (deal) {
+        dealStatus = deal.status as unknown as DealStatus;
+        escrowState = deal.escrow?.status;
+        for (const p of deal.participants) {
+          if (p.walletAddress) knownAddresses.add(p.walletAddress);
+        }
+        if (deal.escrow?.buyerAddress) knownAddresses.add(deal.escrow.buyerAddress);
+        if (deal.escrow?.sellerAddress) knownAddresses.add(deal.escrow.sellerAddress);
+      }
+    } catch {
+      // default to Negotiating if the deal can't be loaded
+    }
+
+    const { priorIntents, recentMessages } = await this.loadDealHistory(dealId);
+
+    return {
+      dealStatus,
+      escrowState,
+      knownAddresses: Array.from(knownAddresses),
+      priorIntents,
+      recentMessages,
+    };
+  }
+
+  /** Pull previously-detected intents (for repetition) and recent message text. */
+  private async loadDealHistory(
+    dealId: string,
+  ): Promise<{ priorIntents: ScamIntent[]; recentMessages: string[] }> {
+    const priorIntents: ScamIntent[] = [];
+    const recentMessages: string[] = [];
+    try {
+      const events = await this.prisma.dealEvent.findMany({
+        where: { dealId, type: { in: ['risk.detected', 'transcript.chunk'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+        select: { type: true, metadata: true },
+      });
+      for (const e of events) {
+        const meta = (e.metadata ?? {}) as Record<string, unknown>;
+        if (e.type === 'risk.detected' && Array.isArray(meta.intents)) {
+          for (const i of meta.intents) {
+            if (typeof i === 'string') priorIntents.push(i as ScamIntent);
+          }
+        }
+        if (e.type === 'transcript.chunk' && typeof meta.text === 'string') {
+          recentMessages.push(meta.text);
+        }
+      }
+    } catch {
+      // best-effort: no history is fine
+    }
+    return { priorIntents, recentMessages: recentMessages.reverse() };
   }
 
   private async persistEvent(
