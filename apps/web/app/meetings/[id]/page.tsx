@@ -37,6 +37,7 @@ import { type AgoraRealtimeTranscriptChunk } from '../../../lib/agora-stt';
 import { formatRelativeTime } from '../../../lib/format';
 import { shortAddress } from '../../../lib/wallet';
 import { useAuth } from '../../../providers/auth-provider';
+import { useSocket } from '../../../providers/socket-provider';
 
 interface RealtimeEntry {
   id: string;
@@ -79,6 +80,7 @@ export default function MeetingDetailPage() {
   const searchParams = useSearchParams();
   const meetingId = params?.id ?? null;
   const { address, status: authStatus } = useAuth();
+  const { socket, joinMeeting, leaveMeeting } = useSocket();
 
   const meetingQuery = useMeeting(meetingId);
   const transcriptsQuery = useMeetingTranscripts(meetingId);
@@ -177,6 +179,77 @@ export default function MeetingDetailPage() {
       setRealtimeNotice(sttState.fallbackReason);
     }
   }, [sttState?.fallbackReason]);
+
+  useEffect(() => {
+    if (!meetingId) {
+      return;
+    }
+
+    joinMeeting(meetingId, address ?? undefined);
+    return () => {
+      leaveMeeting(meetingId);
+    };
+  }, [address, joinMeeting, leaveMeeting, meetingId]);
+
+  useEffect(() => {
+    if (!socket || !meetingId) {
+      return;
+    }
+
+    const handleMeetingTranscript = (payload: {
+      meetingId?: string;
+      transcript?: {
+        id?: string;
+        speakerLabel?: string;
+        content?: string;
+        language?: string;
+        startTime?: number;
+        endTime?: number | null;
+        confidence?: number | null;
+        translations?: Array<{ targetLanguage?: string; content?: string }>;
+      };
+    }) => {
+      if (payload.meetingId !== meetingId || !payload.transcript?.id) {
+        return;
+      }
+
+      const translation = payload.transcript.translations?.[0];
+      setRealtimeEntries((current) => {
+        const next = current.filter((entry) => entry.id !== payload.transcript?.id);
+        next.push({
+          id: payload.transcript.id,
+          speakerLabel: payload.transcript.speakerLabel ?? 'speaker',
+          text: payload.transcript.content ?? '',
+          language: payload.transcript.language ?? 'und',
+          translatedText: translation?.content ?? null,
+          targetLanguage: translation?.targetLanguage ?? null,
+          startTime: payload.transcript.startTime ?? null,
+          endTime: payload.transcript.endTime ?? null,
+          isFinal: true,
+          updatedAt: Date.now(),
+        });
+        return next.sort((left, right) => left.updatedAt - right.updatedAt).slice(-12);
+      });
+
+      void transcriptsQuery.refetch();
+      void riskQuery.refetch();
+    };
+
+    const handleMeetingRiskEvent = (payload: { meetingId?: string }) => {
+      if (payload.meetingId !== meetingId) {
+        return;
+      }
+      void riskQuery.refetch();
+    };
+
+    socket.on('meeting_transcript', handleMeetingTranscript);
+    socket.on('meeting_risk_event', handleMeetingRiskEvent);
+
+    return () => {
+      socket.off('meeting_transcript', handleMeetingTranscript);
+      socket.off('meeting_risk_event', handleMeetingRiskEvent);
+    };
+  }, [meetingId, riskQuery, socket, transcriptsQuery]);
 
   function upsertRealtimeEntry(chunk: AgoraRealtimeTranscriptChunk) {
     setRealtimeEntries((current) => {

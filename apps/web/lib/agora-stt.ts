@@ -169,22 +169,71 @@ function normalizePayload(payload: Record<string, unknown>): AgoraRealtimeTransc
   };
 }
 
+function tryParseNestedJson(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function collectNormalizedChunks(input: unknown): AgoraRealtimeTranscriptChunk[] {
+  if (Array.isArray(input)) {
+    return input.flatMap((item) => collectNormalizedChunks(item));
+  }
+
+  if (!input || typeof input !== 'object') {
+    if (typeof input === 'string') {
+      const nested = tryParseNestedJson(input);
+      return nested ? collectNormalizedChunks(nested) : [];
+    }
+    return [];
+  }
+
+  const payload = input as Record<string, unknown>;
+  const direct = normalizePayload(payload);
+  if (direct) {
+    return [direct];
+  }
+
+  const nestedKeys = [
+    'data',
+    'payload',
+    'result',
+    'results',
+    'streamMessage',
+    'stream_message',
+    'segment',
+    'segments',
+    'transcript',
+    'transcripts',
+    'message',
+    'messages',
+    'items',
+    'content',
+  ] as const;
+
+  const collected: AgoraRealtimeTranscriptChunk[] = [];
+  for (const key of nestedKeys) {
+    if (!(key in payload)) {
+      continue;
+    }
+
+    collected.push(...collectNormalizedChunks(payload[key]));
+  }
+
+  return collected;
+}
+
 export async function decodeAgoraSttPayload(payload: Uint8Array) {
   const rawText = await maybeGunzip(payload);
   const parsed = JSON.parse(rawText) as unknown;
-
-  if (Array.isArray(parsed)) {
-    return parsed
-      .map((item) => (item && typeof item === 'object' ? normalizePayload(item as Record<string, unknown>) : null))
-      .filter((item): item is AgoraRealtimeTranscriptChunk => Boolean(item));
-  }
-
-  if (parsed && typeof parsed === 'object') {
-    const normalized = normalizePayload(parsed as Record<string, unknown>);
-    return normalized ? [normalized] : [];
-  }
-
-  return [];
+  return collectNormalizedChunks(parsed);
 }
 
 export function getMeetingSttPusherUidFromState(pusherUid: number | null | undefined) {

@@ -22,6 +22,8 @@ interface SocketState {
   connected: boolean;
   joinDeal: (dealId: string, wallet?: string) => void;
   leaveDeal: (dealId: string) => void;
+  joinMeeting: (meetingId: string, wallet?: string) => void;
+  leaveMeeting: (meetingId: string) => void;
   sendChat: (msg: {
     dealId: string;
     message: string;
@@ -63,6 +65,14 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     socketRef.current?.emit('leave_deal', { dealId });
   }, []);
 
+  const joinMeeting = useCallback((meetingId: string, wallet?: string) => {
+    socketRef.current?.emit('join_meeting', { meetingId, wallet });
+  }, []);
+
+  const leaveMeeting = useCallback((meetingId: string) => {
+    socketRef.current?.emit('leave_meeting', { meetingId });
+  }, []);
+
   const sendChat = useCallback(
     (msg: { dealId: string; message: string; sender: string; speakerRole?: 'buyer' | 'seller' }) => {
       socketRef.current?.emit('chat_message', msg);
@@ -72,7 +82,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
   return (
     <SocketContext.Provider
-      value={{ socket, connected, joinDeal, leaveDeal, sendChat }}
+      value={{ socket, connected, joinDeal, leaveDeal, joinMeeting, leaveMeeting, sendChat }}
     >
       {children}
     </SocketContext.Provider>

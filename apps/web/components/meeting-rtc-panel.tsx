@@ -267,9 +267,12 @@ export function MeetingRtcPanel({
           if (!transcriptCallbackRef.current) {
             return;
           }
+          const normalizedRemoteUid =
+            typeof remoteUid === 'number' ? remoteUid : Number(remoteUid);
           if (
             sttPusherUidRef.current &&
-            Number(remoteUid) !== Number(sttPusherUidRef.current)
+            Number.isFinite(normalizedRemoteUid) &&
+            normalizedRemoteUid !== Number(sttPusherUidRef.current)
           ) {
             return;
           }

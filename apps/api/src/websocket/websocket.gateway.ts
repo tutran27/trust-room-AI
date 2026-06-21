@@ -226,4 +226,20 @@ export class WebsocketGateway
   emitNotification(wallet: string, notification: Record<string, unknown>) {
     this.server.to(`user:${wallet}`).emit('notification', notification);
   }
+
+  emitMeetingTranscript(meetingId: string, transcript: Record<string, unknown>) {
+    this.server.to(`meeting:${meetingId}`).emit('meeting_transcript', {
+      meetingId,
+      transcript,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  emitMeetingRiskEvent(meetingId: string, riskEvent: Record<string, unknown>) {
+    this.server.to(`meeting:${meetingId}`).emit('meeting_risk_event', {
+      meetingId,
+      riskEvent,
+      timestamp: new Date().toISOString(),
+    });
+  }
 }

@@ -15,6 +15,7 @@ import { DealStatus, type DealStatus as CanonicalDealStatus } from '@trustroom/t
 import { RtcRole, RtcTokenBuilder } from 'agora-token';
 import * as crypto from 'crypto';
 import { PrismaService } from '../database/prisma.service';
+import { WebsocketGateway } from '../websocket/websocket.gateway';
 import { CreateMeetingDto } from './dto/create-meeting.dto';
 import { StartMeetingSttDto } from './dto/stt.dto';
 
@@ -69,6 +70,7 @@ export class MeetingsService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ConfigService) private readonly configService: ConfigService,
+    @Inject(WebsocketGateway) private readonly ws: WebsocketGateway,
   ) {}
 
   async create(dto: CreateMeetingDto, walletAddress: string) {
@@ -327,7 +329,7 @@ export class MeetingsService {
     const analysis = analyzeTranscript(data.content, normalizedStatus);
 
     if (analysis.hits.length > 0) {
-      await Promise.all(
+      const createdRiskEvents = await Promise.all(
         analysis.hits.map((hit) =>
           this.prisma.meetingRiskEvent.create({
             data: {
@@ -346,15 +348,25 @@ export class MeetingsService {
           }),
         ),
       );
+
+      for (const riskEvent of createdRiskEvents) {
+        this.ws.emitMeetingRiskEvent(data.sessionId, riskEvent);
+      }
     }
 
-    return this.prisma.meetingTranscript.findUnique({
+    const persistedTranscript = await this.prisma.meetingTranscript.findUnique({
       where: { id: transcript.id },
       include: {
         translations: true,
         riskEvents: true,
       },
     });
+
+    if (persistedTranscript) {
+      this.ws.emitMeetingTranscript(data.sessionId, persistedTranscript);
+    }
+
+    return persistedTranscript;
   }
 
   async getTranscripts(sessionId: string) {
@@ -406,7 +418,7 @@ export class MeetingsService {
     description: string;
     evidence?: Prisma.InputJsonValue;
   }) {
-    return this.prisma.meetingRiskEvent.create({
+    const event = await this.prisma.meetingRiskEvent.create({
       data: {
         sessionId: data.sessionId,
         transcriptId: data.transcriptId,
@@ -416,6 +428,9 @@ export class MeetingsService {
         evidence: data.evidence ?? Prisma.DbNull,
       },
     });
+
+    this.ws.emitMeetingRiskEvent(data.sessionId, event);
+    return event;
   }
 
   async getRiskEvents(sessionId: string) {
@@ -593,7 +608,7 @@ export class MeetingsService {
         subscribeAudioUids:
           dto.subscribeAudioUids?.length && !dto.subscribeAudioUids.includes('all')
             ? dto.subscribeAudioUids
-            : undefined,
+            : ['all'],
         enableJsonProtocol: true,
       },
     };
