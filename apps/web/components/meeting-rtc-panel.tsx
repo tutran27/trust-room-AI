@@ -93,6 +93,9 @@ export function MeetingRtcPanel({
   const hasJoinToken = Boolean(token && token.trim().length > 0);
   const canToggleMic = Boolean(localAudioTrackRef.current);
   const canToggleCam = Boolean(localVideoTrackRef.current);
+  const showDeviceWarning = Boolean(
+    deviceWarning && deviceWarning.toLowerCase().includes('transcript realtime'),
+  );
 
   useEffect(() => {
     transcriptCallbackRef.current = onRealtimeTranscript;
@@ -334,9 +337,8 @@ export function MeetingRtcPanel({
         if (localDevices.hasMicrophone) {
           try {
             microphoneTrack = await AgoraRTC.createMicrophoneAudioTrack();
-          } catch (trackError) {
+          } catch {
             setMicEnabled(false);
-            warnings.push(describeDeviceError(trackError, 'microphone'));
           }
         } else {
           setMicEnabled(false);
@@ -490,7 +492,7 @@ export function MeetingRtcPanel({
       <CardContent className="space-y-4">
         {status === 'connecting' ? <Skeleton className="h-[520px] rounded-[28px]" /> : null}
 
-        {status === 'connected' && !deviceWarning ? (
+        {status === 'connected' && !showDeviceWarning ? (
           <Alert variant="success" title="Call room đã kết nối">
             RTC đang hoạt động ổn định.
           </Alert>
@@ -502,7 +504,7 @@ export function MeetingRtcPanel({
           </Alert>
         ) : null}
 
-        {deviceWarning ? (
+        {showDeviceWarning ? (
           <Alert variant="warning" title="Thiết bị cục bộ chưa sẵn sàng">
             {deviceWarning}
           </Alert>

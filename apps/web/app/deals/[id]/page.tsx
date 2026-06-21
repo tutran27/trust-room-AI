@@ -113,7 +113,7 @@ export default function DealDetailPage() {
     <AuthGate>
       <AppShell
         title={deal?.title ?? 'Deal room'}
-        subtitle="Bảng điều phối deal theo thời gian thực: tập trung vào chat, Scam Guard, meeting room, escrow Solana devnet và các hành động quỹ/dispute."
+        subtitle="?i?u ph?i deal, meeting, escrow v? dispute trong m?t m?n h?nh g?n h?n."
         contentClassName="max-w-[1920px] px-3 md:px-5 2xl:px-8"
         actions={
           <>
@@ -147,12 +147,25 @@ export default function DealDetailPage() {
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <StatusBadge value={deal.status} />
-                        <Badge variant="muted">{formatAmount(deal.amount, deal.token)}</Badge>
-                        <Badge variant="muted">{titleCaseStatus(deal.type)}</Badge>
-                        <Badge variant={live.connected ? 'success' : 'warning'}>
-                          {live.connected ? 'realtime connected' : 'offline'}
-                        </Badge>
+                        {meetingsQuery.data?.[0] ? (
+                          <Link href={`/meetings/${meetingsQuery.data[0].id}`}>
+                            <Button >Vào meeting</Button>
+                          </Link>
+                        ) : (
+                          <Button
+                            
+                            onClick={async () => {
+                              const meeting = await createMeeting.mutateAsync({
+                                dealId: deal.id,
+                                title: `${deal.title} - Meeting`,
+                              });
+                              router.push(`/meetings/${meeting.id}`);
+                            }}
+                            disabled={createMeeting.isPending}
+                          >
+                            {createMeeting.isPending ? 'Đang tạo room...' : 'Tạo meeting'}
+                          </Button>
+                        )}
                       </div>
                       <div>
                         <CardTitle className="text-2xl">Deal overview</CardTitle>
@@ -252,12 +265,12 @@ export default function DealDetailPage() {
                     </div>
                   ) : (
                     <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm font-medium text-slate-100">Counterparty ready</p>
+                      <p className="text-sm font-medium text-slate-100">??i t?c s?n s?ng</p>
                       <p className="mt-2 text-sm text-slate-300">
                         Seller hiện tại là {shortAddress(deal.sellerWallet, 5, 5)}.
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Version v{deal.version} • deadline {formatDateTime(deal.deadline)}
+                        v{deal.version} • deadline {formatDateTime(deal.deadline)}
                       </p>
                     </div>
                   )}
@@ -450,61 +463,7 @@ export default function DealDetailPage() {
             </div>
 
             <div className="space-y-6">
-              <Card className="border-white/10 bg-slate-950/70">
-                <CardHeader className="pb-4">
-                  <CardTitle>Meeting room</CardTitle>
-                  <CardDescription>
-                    Nơi chuyển sang phòng họp voice/video đầy đủ khi deal sẵn sàng vào phiên riêng.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {meetingsQuery.isLoading ? (
-                    <Skeleton className="h-24 rounded-2xl" />
-                  ) : meetingsQuery.data?.length ? (
-                    meetingsQuery.data.map((meeting) => (
-                      <div key={meeting.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-medium text-slate-100">{meeting.title}</p>
-                            <p className="text-xs text-slate-400">
-                              {meeting.status} • {meeting.participants?.length ?? 0} participant • created{' '}
-                              {formatRelativeTime(meeting.createdAt)}
-                            </p>
-                          </div>
-                          <Link href={`/meetings/${meeting.id}`}>
-                            <Button variant="secondary">Mở room</Button>
-                          </Link>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <>
-                      <Alert title="Chưa có meeting room">
-                        Tạo meeting riêng cho deal này để lấy invite link, participant list, transcript và Agora token.
-                      </Alert>
-                      <Button
-                        onClick={async () => {
-                          const meeting = await createMeeting.mutateAsync({
-                            dealId: deal.id,
-                            title: `${deal.title} - Meeting`,
-                          });
-                          router.push(`/meetings/${meeting.id}`);
-                        }}
-                        disabled={createMeeting.isPending}
-                      >
-                        Tạo meeting room
-                      </Button>
-                    </>
-                  )}
-                  {createMeeting.error ? (
-                    <Alert variant="danger" title="Không thể tạo meeting">
-                      {createMeeting.error instanceof Error
-                        ? createMeeting.error.message
-                        : 'Lỗi không xác định.'}
-                    </Alert>
-                  ) : null}
-                </CardContent>
-              </Card>
+              
 
               <Card className="border-white/10 bg-slate-950/70">
                 <CardHeader className="pb-4">
