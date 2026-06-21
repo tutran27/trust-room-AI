@@ -38,6 +38,11 @@ interface LocalDeviceState {
   hasCamera: boolean;
 }
 
+interface AudioActivity {
+  level: number;
+  updatedAt: number;
+}
+
 export function MeetingRtcPanel({
   meetingId,
   title,
@@ -72,6 +77,11 @@ export function MeetingRtcPanel({
     hasMicrophone: true,
     hasCamera: true,
   });
+  const [localAudioActivity, setLocalAudioActivity] = useState<AudioActivity>({
+    level: 0,
+    updatedAt: 0,
+  });
+  const [remoteAudioActivity, setRemoteAudioActivity] = useState<Record<string, AudioActivity>>({});
 
   const readyForRtc = Boolean(appId && walletAddress);
   const hasJoinToken = Boolean(token && token.trim().length > 0);
@@ -129,6 +139,8 @@ export function MeetingRtcPanel({
         setDeviceWarning(null);
         setMicEnabled(true);
         setCamEnabled(true);
+        setLocalAudioActivity({ level: 0, updatedAt: 0 });
+        setRemoteAudioActivity({});
 
         await wait(150);
         if (cancelled) {
@@ -143,6 +155,42 @@ export function MeetingRtcPanel({
         const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
         effectClient = client;
         clientRef.current = client;
+
+        client.on('volume-indicator', (volumes: Array<{ uid: string | number; level: number }>) => {
+          const now = Date.now();
+          let localEntry: AudioActivity = { level: 0, updatedAt: now };
+          const nextRemoteActivity: Record<string, AudioActivity> = {};
+
+          for (const volume of volumes) {
+            const normalizedLevel = clampAudioLevel(volume.level);
+            const entry = {
+              level: normalizedLevel,
+              updatedAt: now,
+            };
+
+            if (Number(volume.uid) === Number(uid)) {
+              localEntry = entry;
+            } else {
+              nextRemoteActivity[String(volume.uid)] = entry;
+            }
+          }
+
+          if (!mountedRef.current) {
+            return;
+          }
+
+          setLocalAudioActivity(localEntry);
+          setRemoteAudioActivity((current) => {
+            const merged: Record<string, AudioActivity> = {};
+            const allKeys = new Set([...Object.keys(current), ...Object.keys(nextRemoteActivity)]);
+
+            for (const key of allKeys) {
+              merged[key] = nextRemoteActivity[key] ?? { level: 0, updatedAt: now };
+            }
+
+            return merged;
+          });
+        });
 
         client.on('user-published', async (user: any, mediaType: 'audio' | 'video') => {
           await client.subscribe(user, mediaType);
@@ -205,6 +253,14 @@ export function MeetingRtcPanel({
             return;
           }
           setRemoteParticipants((current) => current.filter((item) => item.uid !== key));
+          setRemoteAudioActivity((current) => {
+            if (!(key in current)) {
+              return current;
+            }
+            const next = { ...current };
+            delete next[key];
+            return next;
+          });
         });
 
         client.on('stream-message', async (remoteUid: string | number, payload: Uint8Array) => {
@@ -236,6 +292,7 @@ export function MeetingRtcPanel({
 
         await client.join(appId!, meetingId, token!, uid);
         joinedChannel = true;
+        client.enableAudioVolumeIndicator();
 
         const localDevices = await detectLocalMediaDevices();
         const warnings: string[] = [];
@@ -325,6 +382,8 @@ export function MeetingRtcPanel({
           remoteUsersRef.current.clear();
           if (mountedRef.current) {
             setRemoteParticipants([]);
+            setLocalAudioActivity({ level: 0, updatedAt: 0 });
+            setRemoteAudioActivity({});
           }
         }
       };
@@ -360,6 +419,9 @@ export function MeetingRtcPanel({
     const next = !micEnabled;
     await localAudioTrackRef.current.setEnabled(next);
     setMicEnabled(next);
+    if (!next) {
+      setLocalAudioActivity({ level: 0, updatedAt: Date.now() });
+    }
   }
 
   async function toggleCam() {
@@ -425,16 +487,26 @@ export function MeetingRtcPanel({
         {(status === 'connected' || status === 'idle') && readyForRtc ? (
           <>
             <div className="grid gap-4 xl:grid-cols-[1.45fr_0.55fr]">
-              <div className="overflow-hidden rounded-[30px] border border-cyan-500/20 bg-[linear-gradient(180deg,rgba(5,10,20,0.55),rgba(2,6,16,0.9))]">
+              <div
+                className="overflow-hidden rounded-[30px] border border-cyan-500/20 bg-[linear-gradient(180deg,rgba(5,10,20,0.55),rgba(2,6,16,0.9))] transition-all duration-300"
+                style={buildSpeakingGlowStyle(localAudioActivity.level, micEnabled)}
+              >
                 <div ref={localVideoRef} className="aspect-[16/9] min-h-[520px] w-full bg-slate-950" />
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
-                  <div>
-                    <p className="text-sm font-medium text-slate-100">
-                      {shortAddress(walletAddress, 6, 6)}
-                    </p>
-                    <p className="text-xs text-slate-400">Local participant</p>
+                  <div className="flex items-center gap-3">
+                    <MicActivityBadge level={localAudioActivity.level} enabled={micEnabled} />
+                    <div>
+                      <p className="text-sm font-medium text-slate-100">
+                        {shortAddress(walletAddress, 6, 6)}
+                      </p>
+                      <p className="text-xs text-slate-400">Local participant</p>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <MicLevelBars level={localAudioActivity.level} enabled={micEnabled} />
+                    <p className="text-sm font-medium text-slate-100">
+                      {describeSpeakingState(localAudioActivity.level, micEnabled)}
+                    </p>
                     {!deviceState.hasMicrophone ? <Badge variant="warning">thiếu mic</Badge> : null}
                     {!deviceState.hasCamera ? <Badge variant="warning">thiếu cam</Badge> : null}
                   </div>
@@ -445,7 +517,7 @@ export function MeetingRtcPanel({
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-slate-100">Người khác trong room</p>
-                    <p className="text-xs text-slate-400">Video/audio remote sẽ đổ vào đây.</p>
+                    <p className="text-xs text-slate-400">Video và audio remote sẽ đổ vào đây.</p>
                   </div>
                   <Badge variant={remoteParticipants.length ? 'info' : 'muted'}>
                     {remoteParticipants.length} remote
@@ -457,7 +529,11 @@ export function MeetingRtcPanel({
                     {remoteParticipants.map((participant) => (
                       <div
                         key={participant.uid}
-                        className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/70"
+                        className="overflow-hidden rounded-[24px] border border-white/10 bg-slate-900/70 transition-all duration-300"
+                        style={buildSpeakingGlowStyle(
+                          remoteAudioActivity[participant.uid]?.level ?? 0,
+                          participant.hasAudio,
+                        )}
                       >
                         <div
                           ref={(node) => {
@@ -465,11 +541,28 @@ export function MeetingRtcPanel({
                           }}
                           className="aspect-video w-full bg-slate-950"
                         />
-                        <div className="flex items-center justify-between px-3 py-2 text-xs text-slate-400">
-                          <span>uid {participant.uid}</span>
-                          <span>
-                            {participant.hasAudio ? 'audio' : 'silent'} •{' '}
-                            {participant.hasVideo ? 'video' : 'no video'}
+                        <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-slate-400">
+                          <span className="flex items-center gap-2">
+                            <MicActivityBadge
+                              level={remoteAudioActivity[participant.uid]?.level ?? 0}
+                              enabled={participant.hasAudio}
+                              compact
+                            />
+                            uid {participant.uid}
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <MicLevelBars
+                              level={remoteAudioActivity[participant.uid]?.level ?? 0}
+                              enabled={participant.hasAudio}
+                              compact
+                            />
+                            <span>
+                              {describeSpeakingState(
+                                remoteAudioActivity[participant.uid]?.level ?? 0,
+                                participant.hasAudio,
+                              )}{' '}
+                              • {participant.hasVideo ? 'video' : 'no video'}
+                            </span>
                           </span>
                         </div>
                       </div>
@@ -515,6 +608,43 @@ export function MeetingRtcPanel({
       </CardContent>
     </Card>
   );
+}
+
+function clampAudioLevel(level: number) {
+  if (!Number.isFinite(level)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round(level)));
+}
+
+function buildSpeakingGlowStyle(level: number, enabled: boolean) {
+  if (!enabled || level <= 6) {
+    return undefined;
+  }
+
+  const alpha = Math.min(0.45, 0.08 + level / 240);
+  const blur = 10 + level / 2.8;
+  const spread = 1 + level / 20;
+
+  return {
+    boxShadow: `0 0 ${blur}px rgba(34,211,238,${alpha}), 0 0 ${spread}px rgba(56,189,248,${
+      alpha / 1.5
+    }) inset`,
+    borderColor: `rgba(34,211,238,${Math.min(0.4, 0.14 + level / 220)})`,
+  };
+}
+
+function describeSpeakingState(level: number, enabled: boolean) {
+  if (!enabled) {
+    return 'mic off';
+  }
+  if (level >= 65) {
+    return 'đang nói rõ';
+  }
+  if (level >= 30) {
+    return 'đang thu tiếng';
+  }
+  return 'đang chờ tiếng nói';
 }
 
 function describeDeviceError(error: unknown, device: 'microphone' | 'camera') {
@@ -599,5 +729,101 @@ function CameraOffIcon() {
       <path d="m16 10 5-3v10l-5-3z" />
       <path d="M4 4l16 16" />
     </svg>
+  );
+}
+
+function MicActivityBadge({
+  level,
+  enabled,
+  compact = false,
+}: {
+  level: number;
+  enabled: boolean;
+  compact?: boolean;
+}) {
+  const sizeClass = compact ? 'h-8 w-8' : 'h-10 w-10';
+  const iconClass = compact ? 'h-3.5 w-3.5' : 'h-[18px] w-[18px]';
+  const isSpeaking = enabled && level > 12;
+
+  return (
+    <div className="relative flex items-center justify-center">
+      {isSpeaking ? (
+        <>
+          <span
+            className={`absolute rounded-full bg-cyan-400/20 ${sizeClass} animate-ping`}
+            style={{
+              transform: `scale(${1 + Math.min(level, 100) / 120})`,
+              animationDuration: `${Math.max(0.8, 1.8 - Math.min(level, 100) / 90)}s`,
+            }}
+          />
+          <span
+            className={`absolute rounded-full border border-cyan-300/40 ${sizeClass}`}
+            style={{
+              transform: `scale(${1 + Math.min(level, 100) / 220})`,
+            }}
+          />
+        </>
+      ) : null}
+      <span
+        className={`relative flex ${sizeClass} items-center justify-center rounded-full border transition-all duration-300 ${
+          enabled
+            ? isSpeaking
+              ? 'border-cyan-300/50 bg-cyan-400/15 text-cyan-100'
+              : 'border-white/10 bg-slate-900/80 text-slate-200'
+            : 'border-white/10 bg-slate-950/80 text-slate-500'
+        }`}
+      >
+        {enabled ? (
+          <svg viewBox="0 0 24 24" aria-hidden="true" className={`${iconClass} fill-none stroke-current stroke-2`}>
+            <rect x="9" y="3" width="6" height="11" rx="3" />
+            <path d="M6 11a6 6 0 0 0 12 0" />
+            <path d="M12 17v4" />
+            <path d="M8 21h8" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" aria-hidden="true" className={`${iconClass} fill-none stroke-current stroke-2`}>
+            <rect x="9" y="3" width="6" height="11" rx="3" />
+            <path d="M6 11a6 6 0 0 0 8.2 5.74" />
+            <path d="M12 17v4" />
+            <path d="M8 21h8" />
+            <path d="M4 4l16 16" />
+          </svg>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function MicLevelBars({
+  level,
+  enabled,
+  compact = false,
+}: {
+  level: number;
+  enabled: boolean;
+  compact?: boolean;
+}) {
+  const barWidth = compact ? 'w-1' : 'w-1.5';
+  const barHeights = enabled
+    ? [
+        Math.max(6, level * 0.22),
+        Math.max(8, level * 0.32),
+        Math.max(10, level * 0.42),
+        Math.max(8, level * 0.3),
+      ]
+    : [6, 6, 6, 6];
+
+  return (
+    <div className="flex items-end gap-1 rounded-full border border-white/10 bg-slate-950/70 px-2 py-1">
+      {barHeights.map((height, index) => (
+        <span
+          key={index}
+          className={`${barWidth} rounded-full transition-all duration-200 ${
+            enabled ? 'bg-cyan-300' : 'bg-slate-600'
+          }`}
+          style={{ height }}
+        />
+      ))}
+    </div>
   );
 }
