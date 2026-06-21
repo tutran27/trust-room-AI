@@ -25,6 +25,10 @@ interface MeetingRtcPanelProps {
   walletAddress: string | null;
   sttPusherUid?: number | null;
   onRealtimeTranscript?: (chunk: AgoraRealtimeTranscriptChunk) => void;
+  onRealtimeTransportStateChange?: (state: {
+    status: 'idle' | 'waiting' | 'receiving' | 'warning';
+    detail?: string;
+  }) => void;
 }
 
 interface RemoteParticipant {
@@ -54,6 +58,7 @@ export function MeetingRtcPanel({
   walletAddress,
   sttPusherUid,
   onRealtimeTranscript,
+  onRealtimeTransportStateChange,
 }: MeetingRtcPanelProps) {
   const localVideoRef = useRef<HTMLDivElement | null>(null);
   const remoteVideoRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -63,6 +68,7 @@ export function MeetingRtcPanel({
   const remoteUsersRef = useRef<Map<string, any>>(new Map());
   const mountedRef = useRef(true);
   const transcriptCallbackRef = useRef(onRealtimeTranscript);
+  const transportStateCallbackRef = useRef(onRealtimeTransportStateChange);
   const sttPusherUidRef = useRef(sttPusherUid);
 
   const [status, setStatus] = useState<
@@ -91,6 +97,10 @@ export function MeetingRtcPanel({
   useEffect(() => {
     transcriptCallbackRef.current = onRealtimeTranscript;
   }, [onRealtimeTranscript]);
+
+  useEffect(() => {
+    transportStateCallbackRef.current = onRealtimeTransportStateChange;
+  }, [onRealtimeTransportStateChange]);
 
   useEffect(() => {
     sttPusherUidRef.current = sttPusherUid;
@@ -141,6 +151,7 @@ export function MeetingRtcPanel({
         setCamEnabled(true);
         setLocalAudioActivity({ level: 0, updatedAt: 0 });
         setRemoteAudioActivity({});
+        transportStateCallbackRef.current?.({ status: 'waiting' });
 
         await wait(150);
         if (cancelled) {
@@ -267,22 +278,38 @@ export function MeetingRtcPanel({
           if (!transcriptCallbackRef.current) {
             return;
           }
-          const normalizedRemoteUid =
-            typeof remoteUid === 'number' ? remoteUid : Number(remoteUid);
-          if (
-            sttPusherUidRef.current &&
-            Number.isFinite(normalizedRemoteUid) &&
-            normalizedRemoteUid !== Number(sttPusherUidRef.current)
-          ) {
-            return;
-          }
-
           try {
             const chunks = await decodeAgoraSttPayload(payload);
+            if (chunks.length === 0) {
+              return;
+            }
+
+            const normalizedRemoteUid =
+              typeof remoteUid === 'number' ? remoteUid : Number(remoteUid);
+            const expectedPusherUid = Number(sttPusherUidRef.current);
+            const senderMismatch =
+              Number.isFinite(normalizedRemoteUid) &&
+              Number.isFinite(expectedPusherUid) &&
+              normalizedRemoteUid !== expectedPusherUid;
+
+            transportStateCallbackRef.current?.({
+              status: 'receiving',
+              detail: senderMismatch
+                ? `Transcript realtime đang về từ bot UID ${String(remoteUid)} thay vì UID dự kiến ${String(
+                    sttPusherUidRef.current,
+                  )}. Hệ thống vẫn tiếp tục nhận để tránh mất script.`
+                : undefined,
+            });
+
             for (const chunk of chunks) {
               transcriptCallbackRef.current?.(chunk);
             }
           } catch (decodeError) {
+            transportStateCallbackRef.current?.({
+              status: 'warning',
+              detail:
+                decodeError instanceof Error ? decodeError.message : String(decodeError),
+            });
             if (mountedRef.current) {
               setDeviceWarning(
                 `Đã kết nối call room nhưng không parse được gói transcript realtime: ${

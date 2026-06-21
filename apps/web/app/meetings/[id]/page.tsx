@@ -130,6 +130,9 @@ export default function MeetingDetailPage() {
   const [translationEnabled, setTranslationEnabled] = useState(true);
   const [realtimeEntries, setRealtimeEntries] = useState<RealtimeEntry[]>([]);
   const [realtimeNotice, setRealtimeNotice] = useState<string | null>(null);
+  const [realtimeTransportState, setRealtimeTransportState] = useState<
+    'idle' | 'waiting' | 'receiving' | 'warning'
+  >('idle');
   const persistedChunkIdsRef = useRef(new Set<string>());
 
   const meeting = meetingQuery.data ?? null;
@@ -223,18 +226,23 @@ export default function MeetingDetailPage() {
         return;
       }
 
-      const translation = payload.transcript.translations?.[0];
+      const transcript = payload.transcript;
+      const transcriptId = transcript.id;
+      if (!transcriptId) {
+        return;
+      }
+      const translation = transcript.translations?.[0];
       setRealtimeEntries((current) => {
-        const next = current.filter((entry) => entry.id !== payload.transcript?.id);
+        const next = current.filter((entry) => entry.id !== transcriptId);
         next.push({
-          id: payload.transcript.id,
-          speakerLabel: payload.transcript.speakerLabel ?? 'speaker',
-          text: payload.transcript.content ?? '',
-          language: payload.transcript.language ?? 'und',
+          id: transcriptId,
+          speakerLabel: transcript.speakerLabel ?? 'speaker',
+          text: transcript.content ?? '',
+          language: transcript.language ?? 'und',
           translatedText: translation?.content ?? null,
           targetLanguage: translation?.targetLanguage ?? null,
-          startTime: payload.transcript.startTime ?? null,
-          endTime: payload.transcript.endTime ?? null,
+          startTime: transcript.startTime ?? null,
+          endTime: transcript.endTime ?? null,
           isFinal: true,
           updatedAt: Date.now(),
         });
@@ -321,9 +329,36 @@ export default function MeetingDetailPage() {
   }
 
   function handleRealtimeTranscript(chunk: AgoraRealtimeTranscriptChunk) {
+    setRealtimeTransportState('receiving');
+    setRealtimeNotice((current) =>
+      current?.includes('UID dự kiến')
+        ? current
+        : 'Đang nhận transcript realtime từ cuộc họp.',
+    );
     upsertRealtimeEntry(chunk);
     if (chunk.isFinal) {
       void persistRealtimeChunk(chunk);
+    }
+  }
+
+  function handleRealtimeTransportStateChange(state: {
+    status: 'idle' | 'waiting' | 'receiving' | 'warning';
+    detail?: string;
+  }) {
+    setRealtimeTransportState(state.status);
+
+    if (state.status === 'waiting') {
+      setRealtimeNotice('Realtime transcript đã được bật. Hệ thống đang chờ câu thoại đầu tiên.');
+      return;
+    }
+
+    if (state.status === 'receiving' && state.detail) {
+      setRealtimeNotice(state.detail);
+      return;
+    }
+
+    if (state.status === 'warning' && state.detail) {
+      setRealtimeNotice(`Luồng transcript realtime có cảnh báo parse: ${state.detail}`);
     }
   }
 
@@ -335,6 +370,7 @@ export default function MeetingDetailPage() {
       .filter(Boolean);
 
     try {
+      setRealtimeTransportState('waiting');
       const result = await startSttMutation.mutateAsync({
         languages,
         targetLanguages,
@@ -476,6 +512,7 @@ export default function MeetingDetailPage() {
                     walletAddress={address}
                     sttPusherUid={sttState?.pusherUid ?? null}
                     onRealtimeTranscript={handleRealtimeTranscript}
+                    onRealtimeTransportStateChange={handleRealtimeTransportStateChange}
                   />
                 </CardContent>
               </Card>
@@ -692,7 +729,8 @@ export default function MeetingDetailPage() {
             </div>
 
             <div className="space-y-6">
-              <Card className="border-white/10 bg-slate-950/70">
+              {riskQuery.isLoading || topRiskEvents.length ? (
+                <Card className="border-white/10 bg-slate-950/70">
                 <CardHeader className="pb-4">
                   <CardTitle>Risk feed</CardTitle>
                   <CardDescription>Chỉ giữ các cảnh báo nghi ngờ và thông tin cần phản ứng ngay.</CardDescription>
@@ -717,13 +755,10 @@ export default function MeetingDetailPage() {
                         <p className="mt-2 text-xs text-slate-500">{formatRelativeTime(event.createdAt)}</p>
                       </div>
                     ))
-                  ) : (
-                    <Alert title="Chưa có nghi ngờ">
-                      Khi transcript kích hoạt rule đáng ngờ, thẻ rủi ro sẽ xuất hiện tại đây.
-                    </Alert>
-                  )}
+                  ) : null}
                 </CardContent>
-              </Card>
+                </Card>
+              ) : null}
 
               <Card className="border-white/10 bg-slate-950/70">
                 <CardHeader className="pb-4">

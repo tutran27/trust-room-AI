@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpStatus,
   HttpException,
   Inject,
   Injectable,
@@ -45,6 +46,8 @@ interface AgoraSttErrorPayload {
   error?: string;
   message?: string;
   reason?: string;
+  code?: string | number;
+  raw?: string;
 }
 
 export interface MeetingSttState {
@@ -603,20 +606,28 @@ export class MeetingsService {
         ? 'asr_translate'
         : 'asr_only';
 
+    const initialAgentName = this.buildSttAgentName(sessionId);
+    const fallbackAgentName = this.buildSttAgentName(sessionId);
+
+    const rtcConfig: Record<string, unknown> = {
+      channelName: sessionId,
+      pubBotUid: String(pusherUid),
+      pubBotToken: botToken,
+      enableJsonProtocol: true,
+    };
+
+    if (
+      dto.subscribeAudioUids?.length &&
+      !dto.subscribeAudioUids.includes('all')
+    ) {
+      rtcConfig.subscribeAudioUids = dto.subscribeAudioUids;
+    }
+
     const basePayload = {
-      name: this.buildSttAgentName(sessionId),
+      name: initialAgentName,
       languages,
       maxIdleTime: dto.maxIdleTime ?? 300,
-      rtcConfig: {
-        channelName: sessionId,
-        pubBotUid: String(pusherUid),
-        pubBotToken: botToken,
-        subscribeAudioUids:
-          dto.subscribeAudioUids?.length && !dto.subscribeAudioUids.includes('all')
-            ? dto.subscribeAudioUids
-            : ['all'],
-        enableJsonProtocol: true,
-      },
+      rtcConfig,
     };
 
     if (dto.enableTranslation && targetLanguages.length > 0 && languages.length === 1) {
@@ -687,7 +698,10 @@ export class MeetingsService {
     }
 
     try {
-      const asrOnly = await this.callAgoraSttJoin(basePayload);
+      const asrOnly = await this.callAgoraSttJoin({
+        ...basePayload,
+        name: fallbackAgentName,
+      });
       return {
         enabled: true,
         mode: 'asr_only',
@@ -906,7 +920,14 @@ export class MeetingsService {
     const payload = rawText ? this.parseAgoraPayload(rawText) : {};
 
     if (!response.ok) {
-      throw new BadRequestException(this.extractAgoraErrorMessage(payload, response.status));
+      throw new HttpException(
+        {
+          statusCode: response.status,
+          message: this.extractAgoraErrorMessage(payload, response.status),
+          agora: payload,
+        },
+        this.mapAgoraHttpStatus(response.status),
+      );
     }
 
     return payload as T;
@@ -980,7 +1001,9 @@ export class MeetingsService {
       const agents = await this.callAgoraSttList(sessionId, '2');
       return (
         agents.find((agent) =>
-          ['STARTED', 'RUNNING', '2', '3'].includes(String(agent.status).toUpperCase()),
+          ['STARTING', 'STARTED', 'RUNNING', 'RECOVERING', '1', '2', '3', '5'].includes(
+            String(agent.status).toUpperCase(),
+          ),
         ) ??
         agents[0] ??
         null
@@ -1100,7 +1123,7 @@ export class MeetingsService {
   private getSttPusherUid(sessionId: string) {
     const digest = crypto.createHash('sha256').update(`stt:${sessionId}`).digest();
     const raw = digest.readUInt32BE(0);
-    return (raw % 900_000_000) + 10_000;
+    return 2_000_000_000 + (raw % 200_000_000);
   }
 
   private toCanonicalDealStatus(status: string): CanonicalDealStatus {
@@ -1130,6 +1153,13 @@ export class MeetingsService {
       typedPayload.reason ??
       `Agora STT request failed with status ${statusCode}.`
     );
+  }
+
+  private mapAgoraHttpStatus(statusCode: number) {
+    if (statusCode >= 400 && statusCode < 600) {
+      return statusCode;
+    }
+    return HttpStatus.BAD_GATEWAY;
   }
 
   private isAgoraSttUnavailableError(error: unknown) {

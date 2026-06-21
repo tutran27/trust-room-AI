@@ -63,6 +63,23 @@ function numberOrNull(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function looksLikeTranscriptText(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 800) {
+    return false;
+  }
+
+  const hasLettersOrDigits = /[\p{L}\p{N}]/u.test(trimmed);
+  const hasUnsafeShape =
+    trimmed.startsWith('<!DOCTYPE') ||
+    trimmed.startsWith('<html') ||
+    trimmed.startsWith('data:') ||
+    trimmed.includes('ERR_') ||
+    trimmed.includes('AgoraRTCError');
+
+  return hasLettersOrDigits && !hasUnsafeShape;
+}
+
 function buildText(payload: Record<string, unknown>) {
   const direct = firstNonEmptyString(
     payload.text,
@@ -232,8 +249,32 @@ function collectNormalizedChunks(input: unknown): AgoraRealtimeTranscriptChunk[]
 
 export async function decodeAgoraSttPayload(payload: Uint8Array) {
   const rawText = await maybeGunzip(payload);
-  const parsed = JSON.parse(rawText) as unknown;
-  return collectNormalizedChunks(parsed);
+  try {
+    const parsed = JSON.parse(rawText) as unknown;
+    return collectNormalizedChunks(parsed);
+  } catch {
+    if (!looksLikeTranscriptText(rawText)) {
+      return [];
+    }
+
+    return [
+      {
+        chunkId: `raw:${Date.now()}:${rawText.slice(0, 24)}`,
+        speakerUid: null,
+        speakerLabel: 'speaker',
+        text: rawText.trim(),
+        language: 'und',
+        translatedText: null,
+        targetLanguage: null,
+        confidence: null,
+        startTime: null,
+        endTime: null,
+        isPartial: true,
+        isFinal: false,
+        receivedAt: Date.now(),
+      },
+    ];
+  }
 }
 
 export function getMeetingSttPusherUidFromState(pusherUid: number | null | undefined) {
