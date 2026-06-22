@@ -241,7 +241,10 @@ export default function MeetingDetailPage() {
   const [sttLanguageInput, setSttLanguageInput] = useState('vi-VN');
   const [sttTargetLanguageInput, setSttTargetLanguageInput] = useState('');
   const [realtimeEntries, setRealtimeEntries] = useState<RealtimeEntry[]>([]);
-  const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
+  const [hasJoinedRoom, setHasJoinedRoom] = useState(
+    () => meetingId && typeof window !== 'undefined'
+      && sessionStorage.getItem(`meeting_joined_${meetingId}`) === 'true'
+  );
   const [displayName, setDisplayName] = useState('');
   const [realtimeNotice, setRealtimeNotice] = useState('');
   const [realtimeTransportState, setRealtimeTransportState] = useState<
@@ -302,7 +305,6 @@ export default function MeetingDetailPage() {
     setSpeakerLabel((current) => current || shortAddress(address, 6, 6));
   }, [address]);
 
-  // When user picks a display name in lobby, use it as speakerLabel
   useEffect(() => {
     if (displayName.trim()) {
       setSpeakerLabel(displayName.trim());
@@ -588,7 +590,10 @@ export default function MeetingDetailPage() {
             meetingTitle={meeting.title}
             displayName={displayName}
             onDisplayNameChange={setDisplayName}
-            onJoin={() => setHasJoinedRoom(true)}
+            onJoin={() => {
+              if (meetingId) sessionStorage.setItem(`meeting_joined_${meetingId}`, 'true');
+              setHasJoinedRoom(true);
+            }}
             joinDisabled={!displayName.trim()}
             joinLoading={tokenQuery.isLoading}
             error={tokenQuery.error instanceof Error ? tokenQuery.error.message : null}
@@ -598,7 +603,7 @@ export default function MeetingDetailPage() {
             <div className="space-y-6">
               {/* Call Room Card */}
               <Card className="overflow-hidden">
-                <CardHeader className="border-b border-white/[0.06] pb-5">
+                <CardHeader className="border-b border-slate-200 pb-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -658,7 +663,7 @@ export default function MeetingDetailPage() {
 
               {/* Transcript Card */}
               <Card>
-                <CardHeader className="border-b border-white/[0.06] pb-5">
+                <CardHeader className="border-b border-slate-200 pb-5">
                   <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                       <CardTitle className="text-lg">Transcript</CardTitle>
@@ -737,9 +742,9 @@ export default function MeetingDetailPage() {
                 <CardContent className="pt-6">
                   <div className="grid gap-4 xl:grid-cols-[1.12fr_0.88fr]">
                     {/* Live Transcript */}
-                    <div className="min-h-[680px] rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.03] p-4">
+                    <div className="min-h-[680px] rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
                       <div className="mb-4 flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-emerald-400">Live</p>
+                        <p className="text-sm font-medium text-indigo-700">Live</p>
                         <Badge variant={activeRealtimeEntries.length ? 'info' : 'muted'}>
                           {activeRealtimeEntries.length} live
                         </Badge>
@@ -750,22 +755,22 @@ export default function MeetingDetailPage() {
                           {activeRealtimeEntries.map((entry) => (
                             <div
                               key={entry.id}
-                              className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
+                              className="rounded-xl border border-slate-200 bg-white p-3"
                             >
-                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
+                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge variant="muted">{entry.speakerLabel}</Badge>
                                   <Badge variant="info">{entry.language}</Badge>
                                 </div>
                                 <span>{formatRelativeTime(new Date(entry.updatedAt).toISOString())}</span>
                               </div>
-                              <p className="text-sm leading-relaxed text-zinc-100">{entry.text}</p>
+                              <p className="text-sm leading-relaxed text-slate-900">{entry.text}</p>
                               {entry.translatedText && entry.targetLanguage ? (
-                                <div className="mt-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.04] px-3 py-2">
-                                  <p className="text-[11px] uppercase tracking-wider text-emerald-400/80">
+                                <div className="mt-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+                                  <p className="text-[11px] uppercase tracking-wider text-indigo-600/80">
                                     Translation {entry.targetLanguage}
                                   </p>
-                                  <p className="mt-1 text-sm text-emerald-300">
+                                  <p className="mt-1 text-sm text-indigo-700">
                                     {entry.translatedText}
                                   </p>
                                 </div>
@@ -774,10 +779,10 @@ export default function MeetingDetailPage() {
                           ))}
                         </div>
                       ) : (
-                        <div className="flex min-h-[500px] items-center justify-center rounded-xl border border-dashed border-emerald-500/15 bg-white/[0.01] p-8 text-center">
+                        <div className="flex min-h-[500px] items-center justify-center rounded-xl border border-dashed border-indigo-200 bg-white/60 p-8 text-center">
                           <div className="max-w-md space-y-2">
-                            <p className="text-base font-medium text-zinc-200">Chưa có script realtime</p>
-                            <p className="text-sm leading-relaxed text-zinc-500">
+                            <p className="text-base font-medium text-slate-700">Chưa có script realtime</p>
+                            <p className="text-sm leading-relaxed text-slate-400">
                               Khi STT nhận được lời nói từ cuộc họp, transcript sẽ chạy trực tiếp ở khu vực này.
                             </p>
                           </div>
@@ -786,9 +791,9 @@ export default function MeetingDetailPage() {
                     </div>
 
                     {/* Saved Timeline */}
-                    <div className="min-h-[680px] rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                    <div className="min-h-[680px] rounded-xl border border-slate-200 bg-white p-4">
                       <div className="mb-4 flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-zinc-100">Timeline đã lưu</p>
+                        <p className="text-sm font-medium text-slate-900">Timeline đã lưu</p>
                         <Badge variant="muted">{transcripts.length} dòng</Badge>
                       </div>
 
@@ -807,9 +812,9 @@ export default function MeetingDetailPage() {
                             return (
                               <div
                                 key={item.id}
-                                className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
+                                className="rounded-xl border border-slate-200 bg-white p-3"
                               >
-                                <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-[11px] text-zinc-500">
+                                <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-400">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <Badge variant="muted">{item.speakerLabel}</Badge>
                                     <Badge variant="info">{item.language}</Badge>
@@ -821,15 +826,15 @@ export default function MeetingDetailPage() {
                                   </div>
                                   <span>{item.startTime.toFixed(2)}s</span>
                                 </div>
-                                <p className="text-sm leading-relaxed text-zinc-200">{item.content}</p>
+                                <p className="text-sm leading-relaxed text-slate-700">{item.content}</p>
                                 {item.translations?.length ? (
                                   <div className="mt-2 space-y-1">
                                     {item.translations.map((translation) => (
                                       <div
                                         key={translation.id}
-                                        className="rounded-lg border border-emerald-500/10 bg-emerald-500/[0.03] px-3 py-1.5 text-xs text-emerald-300"
+                                        className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-xs text-indigo-700"
                                       >
-                                        <span className="mr-2 text-[10px] uppercase tracking-wider text-emerald-400/70">
+                                        <span className="mr-2 text-[10px] uppercase tracking-wider text-indigo-500/70">
                                           {translation.targetLanguage}
                                         </span>
                                         {translation.content}
@@ -887,12 +892,12 @@ export default function MeetingDetailPage() {
                         return (
                           <div
                             key={event.id}
-                            className="rounded-xl border border-red-500/15 bg-red-500/[0.04] p-3"
+                            className="rounded-xl border border-red-200 bg-red-50 p-3"
                           >
                             <div className="mb-2 flex flex-wrap items-center gap-2">
                               <Badge variant={riskVariant(event.severity)}>{event.severity}</Badge>
                             </div>
-                            <p className="text-sm leading-relaxed text-zinc-200">{riskMessage}</p>
+                            <p className="text-sm leading-relaxed text-slate-700">{riskMessage}</p>
                           </div>
                         );
                       })
@@ -943,24 +948,24 @@ export default function MeetingDetailPage() {
                   </Button>
 
                   {meeting.invites?.length ? (
-                    <div className="space-y-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                    <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
                       {meeting.invites.slice(0, 3).map((invite) => {
                         const link = `${
                           typeof window !== 'undefined' ? window.location.origin : ''
                         }/meetings/${meeting.id}?invite=${invite.token}`;
 
                         return (
-                          <div key={invite.id} className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-2.5">
+                          <div key={invite.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
                             <div className="mb-1.5 flex flex-wrap items-center gap-2">
                               <Badge variant="muted">{invite.role}</Badge>
                               <Badge variant={invite.status === 'Accepted' ? 'success' : 'info'}>
                                 {invite.status}
                               </Badge>
-                              <span className="text-[11px] text-zinc-500">
+                              <span className="text-[11px] text-slate-400">
                                 {invite.usedCount}/{invite.maxUses}
                               </span>
                             </div>
-                            <p className="break-all text-[11px] text-zinc-500">{link}</p>
+                            <p className="break-all text-[11px] text-slate-500">{link}</p>
                           </div>
                         );
                       })}
@@ -971,7 +976,7 @@ export default function MeetingDetailPage() {
 
               {/* Manual Transcript */}
               {isDemoTranscriptMode ? (
-                <Card className="border-amber-500/15 bg-amber-500/[0.03]">
+                <Card className="border-t-2 border-t-amber-300">
                   <CardHeader className="pb-4">
                     <CardTitle>Manual transcript</CardTitle>
                   </CardHeader>

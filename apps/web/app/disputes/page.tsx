@@ -36,7 +36,7 @@ export default function DisputesPage() {
           <div className="grid gap-3">
             {disputes.data.map((dispute) => (
               <Link key={dispute.id} href={`/disputes/${dispute.id}`}>
-                <Card className="transition-all duration-200 hover:bg-white/[0.05] hover:border-white/[0.1]">
+                <Card className="transition-all duration-200 hover:bg-slate-50 hover:border-slate-300">
                   <CardHeader>
                     <div className="flex items-center justify-between gap-3">
                       <CardTitle>{dispute.reason}</CardTitle>
@@ -45,20 +45,20 @@ export default function DisputesPage() {
                   </CardHeader>
                   <CardContent className="grid gap-3 text-sm md:grid-cols-4">
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Deal</p>
-                      <p className="mt-1 font-medium text-zinc-100">{dispute.deal?.title ?? dispute.dealId}</p>
+                      <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Deal</p>
+                      <p className="mt-1 font-medium text-slate-900">{dispute.deal?.title ?? dispute.dealId}</p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Raised by</p>
-                      <p className="mt-1 font-mono text-zinc-400">{shortAddress(dispute.raisedBy, 5, 5)}</p>
+                      <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Raised by</p>
+                      <p className="mt-1 font-mono text-slate-600">{shortAddress(dispute.raisedBy, 5, 5)}</p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Evidence</p>
-                      <p className="mt-1 text-zinc-300">{dispute.evidence?.length ?? 0} item(s)</p>
+                      <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Evidence</p>
+                      <p className="mt-1 text-slate-700">{dispute.evidence?.length ?? 0} item(s)</p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Created</p>
-                      <p className="mt-1 text-zinc-300">{formatDateTime(dispute.createdAt)}</p>
+                      <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Created</p>
+                      <p className="mt-1 text-slate-700">{formatDateTime(dispute.createdAt)}</p>
                     </div>
                   </CardContent>
                 </Card>

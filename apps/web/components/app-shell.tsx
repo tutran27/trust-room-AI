@@ -42,11 +42,11 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100">
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#09090b]/80 backdrop-blur-xl">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-8">
-            <Link href="/" className="text-base font-semibold tracking-tight text-emerald-400">
+            <Link href="/" className="text-base font-semibold tracking-tight text-indigo-600">
               TrustRoom AI
             </Link>
             <nav className="hidden gap-1 md:flex">
@@ -58,8 +58,8 @@ export function AppShell({
                     href={item.href}
                     className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
                       active
-                        ? 'bg-emerald-500/10 text-emerald-400'
-                        : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
+                        ? 'bg-indigo-50 text-indigo-700'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                     }`}
                   >
                     {item.label}
@@ -74,19 +74,19 @@ export function AppShell({
                 <button
                   onClick={copyAddress}
                   title={copied ? 'Đã copy!' : `Copy full address: ${address}`}
-                  className="hidden items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 transition-colors duration-150 hover:bg-white/[0.06] cursor-pointer sm:flex"
+                  className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 transition-colors duration-150 hover:bg-slate-50 cursor-pointer sm:flex"
                 >
                   <Avatar size="sm" address={address} showLabel={false} />
-                  <span className="text-sm text-zinc-300">
+                  <span className="text-sm text-slate-700">
                     {shortAddress(address, 5, 5)}
                   </span>
                   {copied ? (
-                    <span className="text-xs text-emerald-400">✓</span>
+                    <span className="text-xs text-indigo-600">✓</span>
                   ) : (
-                    <span className="text-xs text-zinc-500">copy</span>
+                    <span className="text-xs text-slate-400">copy</span>
                   )}
                 </button>
-                <Button variant="ghost" onClick={logout} className="text-zinc-400">
+                <Button variant="ghost" onClick={logout} className="text-slate-500">
                   Đăng xuất
                 </Button>
               </>
@@ -98,11 +98,11 @@ export function AppShell({
       </header>
 
       <main className={`mx-auto max-w-7xl px-6 py-8 ${contentClassName ?? ''}`}>
-        <div className="mb-8 flex flex-col gap-4 border-b border-white/[0.06] pb-6 md:flex-row md:items-end md:justify-between">
+        <div className="mb-8 flex flex-col gap-4 border-b border-slate-200 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">{title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
             {subtitle ? (
-              <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>
+              <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
             ) : null}
           </div>
           {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}

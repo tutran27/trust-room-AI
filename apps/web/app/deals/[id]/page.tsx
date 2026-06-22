@@ -142,7 +142,7 @@ export default function DealDetailPage() {
             <div className="space-y-6">
               {/* Deal Overview Card */}
               <Card className="overflow-hidden">
-                <CardHeader className="border-b border-white/[0.06] pb-5">
+                <CardHeader className="border-b border-slate-200 pb-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -169,11 +169,11 @@ export default function DealDetailPage() {
                         <CardTitle className="text-lg">Deal overview</CardTitle>
                       </div>
                     </div>
-                    <div className="grid gap-1.5 text-sm text-zinc-400 xl:text-right">
-                      <p>Buyer: <span className="font-mono text-zinc-300">{shortAddress(deal.buyerWallet, 5, 5)}</span></p>
+                    <div className="grid gap-1.5 text-sm text-slate-500 xl:text-right">
+                      <p>Buyer: <span className="font-mono text-slate-700">{shortAddress(deal.buyerWallet, 5, 5)}</span></p>
                       <p>
                         Seller:{' '}
-                        {deal.sellerWallet ? <span className="font-mono text-zinc-300">{shortAddress(deal.sellerWallet, 5, 5)}</span> : <span className="text-zinc-500">chưa gán</span>}
+                        {deal.sellerWallet ? <span className="font-mono text-slate-700">{shortAddress(deal.sellerWallet, 5, 5)}</span> : <span className="text-slate-400">chưa gán</span>}
                       </p>
                       <p>Created: {formatDateTime(deal.createdAt)}</p>
                       <p>Updated: {formatRelativeTime(deal.updatedAt)}</p>
@@ -182,9 +182,9 @@ export default function DealDetailPage() {
                 </CardHeader>
                 <CardContent className="grid gap-5 pt-6 xl:grid-cols-[1.2fr_0.8fr]">
                   <div className="space-y-4">
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">Mô tả deal</p>
-                      <p className="text-sm leading-relaxed text-zinc-300">
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wider text-slate-500">Mô tả deal</p>
+                      <p className="text-sm leading-relaxed text-slate-700">
                         {deal.description || 'Chưa có mô tả.'}
                       </p>
                     </div>
@@ -237,8 +237,8 @@ export default function DealDetailPage() {
                   </div>
 
                   {!deal.sellerWallet ? (
-                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
-                      <p className="mb-3 text-sm font-medium text-amber-400">Mời seller</p>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="mb-3 text-sm font-medium text-amber-800">Mời seller</p>
                       <div className="flex flex-col gap-3">
                         <Input
                           value={sellerWallet}
@@ -259,12 +259,12 @@ export default function DealDetailPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="text-sm font-medium text-zinc-100">Đối tác sẵn sàng</p>
-                      <p className="mt-2 text-sm text-zinc-400">
-                        Seller hiện tại là <span className="font-mono text-zinc-300">{shortAddress(deal.sellerWallet, 5, 5)}</span>.
+                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <p className="text-sm font-medium text-slate-900">Đối tác sẵn sàng</p>
+                      <p className="mt-2 text-sm text-slate-500">
+                        Seller hiện tại là <span className="font-mono text-slate-700">{shortAddress(deal.sellerWallet, 5, 5)}</span>.
                       </p>
-                      <p className="mt-1 text-xs text-zinc-500">
+                      <p className="mt-1 text-xs text-slate-400">
                         v{deal.version} • deadline {formatDateTime(deal.deadline)}
                       </p>
                     </div>
@@ -274,7 +274,7 @@ export default function DealDetailPage() {
 
               {/* Realtime + Scam Guard Card */}
               <Card>
-                <CardHeader className="border-b border-white/[0.06] pb-5">
+                <CardHeader className="border-b border-slate-200 pb-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                     <div>
                       <CardTitle className="text-lg">Deal room realtime + Scam Guard</CardTitle>
@@ -309,9 +309,9 @@ export default function DealDetailPage() {
                   <div className="grid gap-4 xl:grid-cols-[1.18fr_0.82fr]">
                     <div className="space-y-4">
                       {/* Transcript */}
-                      <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.03] p-4">
+                      <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
                         <div className="mb-4 flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-emerald-400">Transcript</p>
+                          <p className="text-sm font-medium text-indigo-700">Transcript</p>
                           <Badge variant={live.connected ? 'success' : 'warning'}>
                             {live.connected ? 'live' : 'offline'}
                           </Badge>
@@ -322,23 +322,23 @@ export default function DealDetailPage() {
                             live.messages.map((message, index) => (
                               <div
                                 key={`${message.timestamp}-${index}`}
-                                className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
+                                className="rounded-xl border border-slate-200 bg-white p-3"
                               >
-                                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+                                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <Badge variant="muted">{shortAddress(message.sender, 5, 5)}</Badge>
                                     <Badge variant="info">{message.speakerRole}</Badge>
                                   </div>
                                   <span>{formatRelativeTime(message.timestamp)}</span>
                                 </div>
-                                <p className="text-sm leading-relaxed text-zinc-100">{message.message}</p>
+                                <p className="text-sm leading-relaxed text-slate-900">{message.message}</p>
                               </div>
                             ))
                           ) : (
-                            <div className="flex min-h-[420px] items-center justify-center rounded-xl border border-dashed border-emerald-500/15 bg-white/[0.01] p-8 text-center">
+                            <div className="flex min-h-[420px] items-center justify-center rounded-xl border border-dashed border-indigo-200 bg-white/60 p-8 text-center">
                               <div className="space-y-2">
-                                <p className="text-base font-medium text-zinc-200">Chưa có transcript realtime</p>
-                                <p className="text-sm leading-relaxed text-zinc-500">
+                                <p className="text-base font-medium text-slate-700">Chưa có transcript realtime</p>
+                                <p className="text-sm leading-relaxed text-slate-400">
                                   Gửi một chat message để khởi động realtime monitor và feed dữ liệu cho Scam Guard.
                                 </p>
                               </div>
@@ -348,7 +348,7 @@ export default function DealDetailPage() {
                       </div>
 
                       {/* Chat Input */}
-                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4">
                         <div className="grid gap-3 xl:grid-cols-[1fr_auto]">
                           <Textarea
                             rows={4}
@@ -380,9 +380,9 @@ export default function DealDetailPage() {
 
                     <div className="space-y-4">
                       {/* AI Monitor */}
-                      <div className="rounded-2xl border border-red-500/15 bg-red-500/[0.04] p-4">
+                      <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
                         <div className="mb-4 flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-zinc-100">AI monitor</p>
+                          <p className="text-sm font-medium text-slate-900">AI monitor</p>
                           <Badge variant={chatRiskSummary ? riskVariant(chatRiskSummary.level) : 'muted'}>
                             {chatRiskSummary?.level ?? 'idle'}
                           </Badge>
@@ -390,14 +390,14 @@ export default function DealDetailPage() {
 
                         {chatRiskSummary ? (
                           <div className="space-y-3">
-                            <p className="text-sm leading-relaxed text-zinc-300">
+                            <p className="text-sm leading-relaxed text-slate-700">
                               {chatRiskSummary.reasons.join(' • ')}
                             </p>
-                            <div className="rounded-lg border border-red-500/10 bg-red-500/[0.04] px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-wider text-red-400/80">
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                              <p className="text-[11px] uppercase tracking-wider text-red-600/80">
                                 Trigger text
                               </p>
-                              <p className="mt-1 text-sm text-zinc-200">
+                              <p className="mt-1 text-sm text-slate-800">
                                 {chatRiskSummary.triggerText}
                               </p>
                             </div>
@@ -410,9 +410,9 @@ export default function DealDetailPage() {
                       </div>
 
                       {/* Realtime Updates */}
-                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4">
                         <div className="mb-4 flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-zinc-100">Realtime updates</p>
+                          <p className="text-sm font-medium text-slate-900">Realtime updates</p>
                           <Badge variant="muted">{live.updates.length}</Badge>
                         </div>
                         {live.updates.length > 0 ? (
@@ -420,22 +420,22 @@ export default function DealDetailPage() {
                             {live.updates.map((update, index) => (
                               <div
                                 key={`${update.timestamp}-${index}`}
-                                className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3 text-sm text-zinc-400"
+                                className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm text-slate-500"
                               >
-                                <p className="font-medium text-zinc-200">{update.kind ?? 'deal_update'}</p>
+                                <p className="font-medium text-slate-700">{update.kind ?? 'deal_update'}</p>
                                 <p>
                                   {update.from
                                     ? `${update.from} -> ${update.to}`
                                     : update.status ?? 'No status payload'}
                                 </p>
-                                <p className="mt-1 text-[11px] text-zinc-500">
+                                <p className="mt-1 text-[11px] text-slate-400">
                                   {formatRelativeTime(update.timestamp)}
                                 </p>
                               </div>
                             ))}
                           </div>
                         ) : (
-                          <p className="text-sm text-zinc-500">Chưa có cập nhật realtime.</p>
+                          <p className="text-sm text-slate-400">Chưa có cập nhật realtime.</p>
                         )}
                       </div>
                     </div>
@@ -468,11 +468,11 @@ export default function DealDetailPage() {
                     <>
                       <div className="flex items-center justify-between">
                         <StatusBadge value={escrow.status} />
-                        <span className="text-sm font-medium text-zinc-200">
+                        <span className="text-sm font-medium text-slate-900">
                           {formatAmount(escrow.amount, deal.token)}
                         </span>
                       </div>
-                      <div className="space-y-1 text-xs text-zinc-400">
+                      <div className="space-y-1 text-xs text-slate-500">
                         <p>Buyer: <span className="font-mono">{shortAddress(escrow.buyerAddress, 6, 6)}</span> {escrow.buyerConfirmed ? '✅' : '⏳'}</p>
                         <p>Seller: <span className="font-mono">{shortAddress(escrow.sellerAddress, 6, 6)}</span> {escrow.sellerConfirmed ? '✅' : '⏳'}</p>
                       </div>
@@ -481,7 +481,7 @@ export default function DealDetailPage() {
                           href={`https://solscan.io/tx/${escrow.txSignature}?cluster=devnet`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-emerald-400 hover:underline"
+                          className="text-xs text-indigo-600 hover:underline"
                         >
                           Xem tx trên Solscan →
                         </a>
@@ -744,19 +744,21 @@ export default function DealDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {deal.events?.length ? (
-                    deal.events.map((event) => (
-                      <div key={event.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-zinc-100">{event.type}</p>
-                          <p className="text-[11px] text-zinc-500">{formatRelativeTime(event.createdAt)}</p>
+                    <div className="divide-y divide-slate-100">
+                      {deal.events.map((event) => (
+                        <div key={event.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">{event.type}</p>
+                            <p className="mt-0.5 text-[11px] font-mono text-slate-400">
+                              {shortAddress(event.actorWallet, 5, 5)}
+                            </p>
+                          </div>
+                          <p className="shrink-0 text-[11px] text-slate-400">{formatRelativeTime(event.createdAt)}</p>
                         </div>
-                        <p className="mt-1 text-[11px] font-mono text-zinc-500">
-                          {shortAddress(event.actorWallet, 5, 5)}
-                        </p>
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   ) : (
-                    <p className="text-sm text-zinc-500">Chưa có timeline event.</p>
+                    <p className="text-sm text-slate-400">Chưa có timeline event.</p>
                   )}
                 </CardContent>
               </Card>

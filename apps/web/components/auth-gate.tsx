@@ -9,7 +9,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (status === 'connecting') {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="flex items-center gap-3 text-slate-300">
+        <div className="flex items-center gap-3 text-slate-600">
           <Spinner />
           <span>Đang kết nối ví và xác thực phiên…</span>
         </div>

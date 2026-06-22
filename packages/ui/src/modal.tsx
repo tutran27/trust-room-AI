@@ -36,30 +36,30 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       aria-label={title}
     >
       <div
-        className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-800/50 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
       <div
         className={cn(
-          'relative z-10 w-full max-w-lg rounded-xl border border-slate-800 bg-slate-900 shadow-xl',
+          'relative z-10 w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-xl',
           className,
         )}
       >
         {title ? (
-          <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-            <h2 className="text-lg font-semibold text-slate-50">{title}</h2>
+          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+            <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
             <button
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+              className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
             >
               <span aria-hidden="true">×</span>
             </button>
           </div>
         ) : null}
-        <div className="px-6 py-4 text-slate-200">{children}</div>
+        <div className="px-6 py-4 text-slate-700">{children}</div>
       </div>
     </div>
   );

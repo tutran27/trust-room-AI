@@ -27,15 +27,15 @@ export function NotificationPanel() {
           </Alert>
         ) : notifications.data && notifications.data.length > 0 ? (
           notifications.data.slice(0, 6).map((item) => (
-            <div key={item.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 transition-colors hover:bg-white/[0.04]">
+            <div key={item.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-zinc-100">{item.title}</p>
-                  <p className="mt-0.5 text-xs text-zinc-400 line-clamp-2">{item.message}</p>
+                  <p className="text-sm font-medium text-slate-900">{item.title}</p>
+                  <p className="mt-0.5 text-xs text-slate-500 line-clamp-2">{item.message}</p>
                 </div>
                 <StatusBadge value={item.read ? 'Resolved' : 'Open'} />
               </div>
-              <p className="mt-2 text-[11px] text-zinc-500">{formatRelativeTime(item.createdAt)}</p>
+              <p className="mt-2 text-[11px] text-slate-400">{formatRelativeTime(item.createdAt)}</p>
             </div>
           ))
         ) : (

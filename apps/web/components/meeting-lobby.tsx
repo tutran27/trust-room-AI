@@ -97,23 +97,23 @@ export function MeetingLobby({
   }
 
   return (
-    <div className="flex min-h-[70vh] items-center justify-center">
-      <div className="w-full max-w-lg space-y-6">
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="w-full max-w-lg space-y-5">
         {/* Title */}
         <div className="text-center">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
             Lobby
           </p>
-          <h2 className="mt-2 text-xl font-semibold tracking-tight text-zinc-100">
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
             {meetingTitle}
           </h2>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-slate-500">
             Kiểm tra thiết bị trước khi vào phòng
           </p>
         </div>
 
         {/* Camera preview */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#09090b]">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
           <video
             ref={videoRef}
             muted
@@ -122,12 +122,12 @@ export function MeetingLobby({
           />
 
           {!camEnabled && (
-            <div className="flex aspect-[16/9] w-full items-center justify-center bg-[#09090b]">
+            <div className="flex aspect-[16/9] w-full items-center justify-center bg-slate-100">
               <div className="flex flex-col items-center gap-3">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/[0.06] text-2xl">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm text-2xl">
                   📷
                 </div>
-                <p className="text-sm text-zinc-500">Camera đã tắt</p>
+                <p className="text-sm text-slate-500">Camera đã tắt</p>
               </div>
             </div>
           )}
@@ -135,12 +135,12 @@ export function MeetingLobby({
           {/* Mic/Cam overlay badges */}
           <div className="absolute bottom-4 left-4 flex gap-2">
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
-              micEnabled ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+              micEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
             }`}>
               {micEnabled ? '🎤 Mic on' : '🎤 Mic off'}
             </span>
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
-              camEnabled ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+              camEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
             }`}>
               {camEnabled ? '📷 Cam on' : '📷 Cam off'}
             </span>
@@ -163,7 +163,7 @@ export function MeetingLobby({
 
         {/* Name input */}
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-zinc-300">Tên hiển thị</label>
+          <label className="text-sm font-medium text-slate-700">Tên hiển thị</label>
           <Input
             value={displayName}
             onChange={(e) => onDisplayNameChange(e.target.value)}
@@ -184,8 +184,8 @@ export function MeetingLobby({
               onClick={() => setMicEnabled((prev) => !prev)}
               className={`flex h-12 w-12 items-center justify-center rounded-full border transition-all duration-150 ${
                 micEnabled
-                  ? 'border-white/[0.06] bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]'
-                  : 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/15'
+                  ? 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  : 'border-red-400 bg-red-50 text-red-600 hover:bg-red-100'
               }`}
               title={micEnabled ? 'Tắt mic' : 'Bật mic'}
             >
@@ -212,8 +212,8 @@ export function MeetingLobby({
               onClick={() => setCamEnabled((prev) => !prev)}
               className={`flex h-12 w-12 items-center justify-center rounded-full border transition-all duration-150 ${
                 camEnabled
-                  ? 'border-white/[0.06] bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]'
-                  : 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/15'
+                  ? 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  : 'border-red-400 bg-red-50 text-red-600 hover:bg-red-100'
               }`}
               title={camEnabled ? 'Tắt camera' : 'Bật camera'}
             >

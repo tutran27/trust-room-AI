@@ -204,8 +204,8 @@ export default function CreateDealPage() {
             <CardContent className="space-y-4">
               {aiSummary ? (
                 <>
-                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
                       <Badge variant={riskVariant(aiSummary.risk.level)}>
                         {aiSummary.risk.level ?? 'unknown'}
                       </Badge>
@@ -215,84 +215,86 @@ export default function CreateDealPage() {
                       </Badge>
                     </div>
                     {aiSummary.risk.recommendation ? (
-                      <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+                      <p className="text-sm leading-relaxed text-slate-700">
                         {aiSummary.risk.recommendation}
                       </p>
                     ) : null}
                   </div>
 
-                  {textList(termRecord?.summary).length ? (
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="mb-2 text-sm font-medium text-zinc-100">Tóm tắt</p>
-                      <div className="space-y-2 text-sm text-zinc-400">
-                        {textList(termRecord?.summary).map((item, index) => (
-                          <p key={index}>{item}</p>
-                        ))}
+                  <div className="divide-y divide-slate-100">
+                    {textList(termRecord?.summary).length ? (
+                      <div className="py-3 first:pt-0">
+                        <p className="mb-2 text-sm font-medium text-slate-900">Tóm tắt</p>
+                        <div className="space-y-2 text-sm text-slate-500">
+                          {textList(termRecord?.summary).map((item, index) => (
+                            <p key={index}>{item}</p>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : null}
+                    ) : null}
 
-                  {objectList(termRecord?.deliverables).length ? (
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="mb-3 text-sm font-medium text-zinc-100">Deliverables</p>
-                      <div className="space-y-2">
-                        {objectList(termRecord?.deliverables).map((item, index) => (
-                          <div key={index} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-                            <p className="text-sm text-zinc-200">
-                              {String(item.description ?? item.name ?? `Deliverable ${index + 1}`)}
-                            </p>
-                            {item.deadline ? (
-                              <p className="mt-1 text-xs text-zinc-500">Deadline: {String(item.deadline)}</p>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {objectList(termRecord?.milestones).length ? (
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="mb-3 text-sm font-medium text-zinc-100">Milestones</p>
-                      <div className="space-y-2">
-                        {objectList(termRecord?.milestones).map((item, index) => (
-                          <div key={index} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-                            <p className="text-sm text-zinc-200">
-                              {String(item.name ?? `Milestone ${index + 1}`)}
-                            </p>
-                            {item.description ? (
-                              <p className="mt-1 text-xs text-zinc-500">{String(item.description)}</p>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {objectList(scamRecord?.flags).length ? (
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="mb-3 text-sm font-medium text-zinc-100">Cờ rủi ro</p>
-                      <div className="space-y-2">
-                        {objectList(scamRecord?.flags).map((flag, index) => (
-                          <div key={index} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant={riskVariant(String(flag.severity ?? 'medium'))}>
-                                {String(flag.severity ?? 'medium')}
-                              </Badge>
-                              <Badge variant="muted">{String(flag.type ?? 'flag')}</Badge>
+                    {objectList(termRecord?.deliverables).length ? (
+                      <div className="py-3">
+                        <p className="mb-3 text-sm font-medium text-slate-900">Deliverables</p>
+                        <div className="space-y-2">
+                          {objectList(termRecord?.deliverables).map((item, index) => (
+                            <div key={index} className="rounded-lg bg-slate-50 px-3 py-2">
+                              <p className="text-sm text-slate-700">
+                                {String(item.description ?? item.name ?? `Deliverable ${index + 1}`)}
+                              </p>
+                              {item.deadline ? (
+                                <p className="mt-1 text-xs text-slate-400">Deadline: {String(item.deadline)}</p>
+                              ) : null}
                             </div>
-                            <p className="mt-2 text-sm leading-relaxed text-zinc-300">
-                              {String(flag.description ?? '')}
-                            </p>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : null}
+                    ) : null}
+
+                    {objectList(termRecord?.milestones).length ? (
+                      <div className="py-3">
+                        <p className="mb-3 text-sm font-medium text-slate-900">Milestones</p>
+                        <div className="space-y-2">
+                          {objectList(termRecord?.milestones).map((item, index) => (
+                            <div key={index} className="rounded-lg bg-slate-50 px-3 py-2">
+                              <p className="text-sm text-slate-700">
+                                {String(item.name ?? `Milestone ${index + 1}`)}
+                              </p>
+                              {item.description ? (
+                                <p className="mt-1 text-xs text-slate-400">{String(item.description)}</p>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {objectList(scamRecord?.flags).length ? (
+                      <div className="py-3 last:pb-0">
+                        <p className="mb-3 text-sm font-medium text-slate-900">Cờ rủi ro</p>
+                        <div className="space-y-2">
+                          {objectList(scamRecord?.flags).map((flag, index) => (
+                            <div key={index} className="rounded-lg bg-slate-50 px-3 py-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant={riskVariant(String(flag.severity ?? 'medium'))}>
+                                  {String(flag.severity ?? 'medium')}
+                                </Badge>
+                                <Badge variant="muted">{String(flag.type ?? 'flag')}</Badge>
+                              </div>
+                              <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                                {String(flag.description ?? '')}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </>
               ) : (
-                <Alert title="Chưa phân tích">
+                <p className="text-sm text-slate-400">
                   Nhấn <strong>AI review mô tả</strong> để xem risk, deliverables và khuyến nghị.
-                </Alert>
+                </p>
               )}
             </CardContent>
           </Card>

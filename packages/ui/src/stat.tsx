@@ -15,14 +15,14 @@ export const Stat = React.forwardRef<HTMLDivElement, StatProps>(
     <div
       ref={ref}
       className={cn(
-        'rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5',
+        'rounded-2xl border border-slate-200 bg-white p-5',
         className,
       )}
       {...props}
     >
-      <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight text-zinc-50">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-zinc-500">{hint}</p> : null}
+      <p className="text-xs font-medium uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-slate-400">{hint}</p> : null}
     </div>
   ),
 );

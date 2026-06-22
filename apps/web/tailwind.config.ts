@@ -24,9 +24,9 @@ const config: Config = {
       },
       colors: {
         surface: {
-          DEFAULT: 'rgba(255,255,255,0.03)',
-          hover: 'rgba(255,255,255,0.06)',
-          active: 'rgba(255,255,255,0.08)',
+          DEFAULT: '#ffffff',
+          hover: '#f8fafc',
+          active: '#f1f5f9',
         },
       },
       borderRadius: {

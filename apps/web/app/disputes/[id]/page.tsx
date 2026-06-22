@@ -52,43 +52,45 @@ export default function DisputeDetailPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-zinc-400">{dispute.data.aiSummary ?? 'Chưa có AI summary riêng.'}</p>
+                <p className="text-sm text-slate-500">{dispute.data.aiSummary ?? 'Chưa có AI summary riêng.'}</p>
                 <div className="grid gap-3 text-sm md:grid-cols-2">
                   <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Raised by</p>
-                    <p className="mt-1 font-mono text-zinc-300">{shortAddress(dispute.data.raisedBy, 5, 5)}</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Raised by</p>
+                    <p className="mt-1 font-mono text-slate-700">{shortAddress(dispute.data.raisedBy, 5, 5)}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Deal ID</p>
-                    <p className="mt-1 font-mono text-zinc-300">{dispute.data.dealId}</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Deal ID</p>
+                    <p className="mt-1 font-mono text-slate-700">{dispute.data.dealId}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Created</p>
-                    <p className="mt-1 text-zinc-300">{formatDateTime(dispute.data.createdAt)}</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Created</p>
+                    <p className="mt-1 text-slate-700">{formatDateTime(dispute.data.createdAt)}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Resolved</p>
-                    <p className="mt-1 text-zinc-300">{formatDateTime(dispute.data.resolvedAt)}</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Resolved</p>
+                    <p className="mt-1 text-slate-700">{formatDateTime(dispute.data.resolvedAt)}</p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-zinc-100">Evidence</h3>
+                  <h3 className="text-sm font-medium text-slate-900">Evidence</h3>
                   {dispute.data.evidence?.length ? (
-                    dispute.data.evidence.map((evidence) => (
-                      <div key={evidence.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-zinc-100">{evidence.type}</p>
-                          <p className="text-[11px] text-zinc-500">{formatDateTime(evidence.createdAt)}</p>
+                    <div className="divide-y divide-slate-100">
+                      {dispute.data.evidence.map((evidence) => (
+                        <div key={evidence.id} className="py-4 first:pt-0 last:pb-0">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-slate-900">{evidence.type}</p>
+                            <p className="text-[11px] text-slate-400">{formatDateTime(evidence.createdAt)}</p>
+                          </div>
+                          <p className="mt-2 text-sm text-slate-600">{evidence.content}</p>
+                          {evidence.url ? (
+                            <a className="mt-2 inline-block text-xs text-indigo-600 hover:underline" href={evidence.url} target="_blank" rel="noreferrer">
+                              {evidence.url}
+                            </a>
+                          ) : null}
                         </div>
-                        <p className="mt-2 text-sm text-zinc-400">{evidence.content}</p>
-                        {evidence.url ? (
-                          <a className="mt-2 inline-block text-xs text-emerald-400 hover:underline" href={evidence.url} target="_blank" rel="noreferrer">
-                            {evidence.url}
-                          </a>
-                        ) : null}
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   ) : (
                     <Alert title="Chưa có evidence">Bạn có thể thêm evidence text ngay bên phải.</Alert>
                   )}

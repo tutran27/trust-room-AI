@@ -153,14 +153,14 @@ export function MeetingRtcPanel({
           <>
             <div className="grid gap-4 xl:grid-cols-[1.45fr_0.55fr]">
               {/* Local video */}
-              <div className="overflow-hidden rounded-2xl border border-emerald-500/15 bg-[linear-gradient(180deg,rgba(5,10,20,0.55),rgba(2,6,16,0.9))]">
-                <div ref={localVideoRef} className="aspect-[16/9] h-[420px] w-full bg-[#09090b]" />
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] px-4 py-3">
+              <div className="overflow-hidden rounded-2xl border border-indigo-200 bg-white">
+                <div ref={localVideoRef} className="aspect-[16/9] h-[420px] w-full bg-slate-100" />
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
                   <div>
-                    <p className="text-sm font-medium text-zinc-100">
+                    <p className="text-sm font-medium text-slate-900">
                       {shortAddress(walletAddress, 6, 6)}
                     </p>
-                    <p className="text-[11px] text-zinc-500">Local participant</p>
+                    <p className="text-[11px] text-slate-500">Local participant</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {!micEnabled ? <Badge variant="warning">mic off</Badge> : null}
@@ -170,9 +170,9 @@ export function MeetingRtcPanel({
               </div>
 
               {/* Remote participants */}
-              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-zinc-100">Remote</p>
+                  <p className="text-sm font-medium text-slate-900">Remote</p>
                   <Badge variant={remoteParticipants.length ? 'info' : 'muted'}>
                     {remoteParticipants.length} remote
                   </Badge>
@@ -183,15 +183,15 @@ export function MeetingRtcPanel({
                     {remoteParticipants.map((participant) => (
                       <div
                         key={participant.uid}
-                        className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]"
+                        className="overflow-hidden rounded-xl border border-slate-200 bg-white"
                       >
                         <div
                           ref={(node) => {
                             remoteVideoRefs.current[participant.uid] = node;
                           }}
-                          className="aspect-video w-full bg-[#09090b]"
+                          className="aspect-video w-full bg-slate-100"
                         />
-                        <div className="flex items-center justify-between px-3 py-2 text-[11px] text-zinc-400">
+                        <div className="flex items-center justify-between px-3 py-2 text-[11px] text-slate-500">
                           <span>uid {participant.uid}</span>
                           <span>
                             {participant.hasAudio ? 'mic' : 'no mic'} • {participant.hasVideo ? 'video' : 'no video'}
@@ -201,10 +201,10 @@ export function MeetingRtcPanel({
                     ))}
                   </div>
                 ) : (
-                  <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-dashed border-white/[0.06] bg-white/[0.01] p-6 text-center">
+                  <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
                     <div className="space-y-2">
-                      <p className="text-sm font-medium text-zinc-200">Chưa có ai khác trong room</p>
-                      <p className="text-[11px] text-zinc-500">
+                      <p className="text-sm font-medium text-slate-700">Chưa có ai khác trong room</p>
+                      <p className="text-[11px] text-slate-400">
                         Khi participant khác join, khung video remote sẽ hiện tại đây.
                       </p>
                     </div>

@@ -66,7 +66,7 @@ export function TabList({ className, ...props }: TabListProps) {
     <div
       role="tablist"
       className={cn(
-        'inline-flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/60 p-1',
+        'inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1',
         className,
       )}
       {...props}
@@ -90,10 +90,10 @@ export function Tab({ value, className, ...props }: TabProps) {
       aria-selected={selected}
       onClick={() => setValue(value)}
       className={cn(
-        'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400',
+        'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
         selected
-          ? 'bg-emerald-600 text-white'
-          : 'text-slate-300 hover:bg-slate-800 hover:text-slate-100',
+          ? 'bg-indigo-600 text-white'
+          : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900',
         className,
       )}
       {...props}
@@ -111,7 +111,7 @@ export function TabPanel({ value, className, children, ...props }: TabPanelProps
   const { value: active } = useTabsContext('TabPanel');
   if (active !== value) return null;
   return (
-    <div role="tabpanel" className={cn('text-slate-200', className)} {...props}>
+    <div role="tabpanel" className={cn('text-slate-700', className)} {...props}>
       {children}
     </div>
   );
