@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -16,10 +15,12 @@ import {
   Label,
   Select,
   Textarea,
+  Alert,
 } from '@trustroom/ui';
-import { AppShell } from '../../../components/app-shell';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthGate } from '../../../components/auth-gate';
 import { useAnalyzeDeal, useCreateDeal } from '../../../hooks/use-api';
+import { Shield, ArrowLeft, Sparkles } from 'lucide-react';
 
 type CreateDealForm = {
   title: string;
@@ -90,214 +91,223 @@ export default function CreateDealPage() {
 
   return (
     <AuthGate>
-      <AppShell
-        title="Tạo deal mới"
-        actions={
-          <Link href="/dashboard">
-            <Button variant="ghost">Quay lại dashboard</Button>
-          </Link>
-        }
-      >
-        <div className="grid gap-6 lg:grid-cols-[1.45fr_1fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle>Thông tin deal</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form
-                className="grid gap-5"
-                onSubmit={form.handleSubmit(async (values) => {
-                  setSubmitError(null);
-                  try {
-                    const created = await createDeal.mutateAsync({
-                      title: values.title,
-                      description: values.description || undefined,
-                      type: values.type,
-                      amount: values.amount,
-                      token: values.token,
-                      deadline: values.deadline || undefined,
-                      sellerWallet: values.sellerWallet || undefined,
-                    });
-                    router.push(`/deals/${created.id}`);
-                  } catch (error) {
-                    setSubmitError(error instanceof Error ? error.message : 'Không thể tạo deal.');
-                  }
-                })}
-              >
-                <div className="grid gap-2">
-                  <Label htmlFor="title">Tiêu đề deal</Label>
-                  <Input
-                    id="title"
-                    placeholder="Ví dụ: OTC 5,000 USDC cho dịch vụ thiết kế"
-                    {...form.register('title', { required: true })}
-                  />
-                </div>
+      <AppLayout>
+        <div className="space-y-6 animate-fade-in">
+          {/* Header */}
+          <div className="flex items-center gap-3">
+            <Link href="/deals">
+              <Button variant="ghost">
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Back
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold text-surface-900 tracking-tight">Tạo deal mới</h1>
+              <p className="text-sm text-surface-500 mt-1">Set terms, amount, and invite counterparties.</p>
+            </div>
+          </div>
 
-                <div className="grid gap-2">
-                  <Label htmlFor="description">Mô tả</Label>
-                  <Textarea
-                    id="description"
-                    rows={6}
-                    placeholder="Mô tả deliverable, điều kiện release, deadline, phạm vi bàn giao..."
-                    {...form.register('description')}
-                  />
-                </div>
-
-                <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-[1.45fr_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Thông tin deal</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form
+                  className="grid gap-5"
+                  onSubmit={form.handleSubmit(async (values) => {
+                    setSubmitError(null);
+                    try {
+                      const created = await createDeal.mutateAsync({
+                        title: values.title,
+                        description: values.description || undefined,
+                        type: values.type,
+                        amount: values.amount,
+                        token: values.token,
+                        deadline: values.deadline || undefined,
+                        sellerWallet: values.sellerWallet || undefined,
+                      });
+                      router.push(`/deals/${created.id}`);
+                    } catch (error) {
+                      setSubmitError(error instanceof Error ? error.message : 'Không thể tạo deal.');
+                    }
+                  })}
+                >
                   <div className="grid gap-2">
-                    <Label htmlFor="type">Loại deal</Label>
-                    <Select id="type" options={DEAL_TYPE_OPTIONS as never} {...form.register('type')} />
+                    <Label htmlFor="title">Tiêu đề deal</Label>
+                    <Input
+                      id="title"
+                      placeholder="Ví dụ: OTC 5,000 USDC cho dịch vụ thiết kế"
+                      {...form.register('title', { required: true })}
+                    />
                   </div>
+
                   <div className="grid gap-2">
-                    <Label htmlFor="token">Token</Label>
-                    <Select id="token" options={TOKEN_OPTIONS as never} {...form.register('token')} />
+                    <Label htmlFor="description">Mô tả</Label>
+                    <Textarea
+                      id="description"
+                      rows={6}
+                      placeholder="Mô tả deliverable, điều kiện release, deadline, phạm vi bàn giao..."
+                      {...form.register('description')}
+                    />
                   </div>
-                </div>
 
-                <div className="grid gap-5 md:grid-cols-2">
-                  <div className="grid gap-2">
-                    <Label htmlFor="amount">Số tiền</Label>
-                    <Input id="amount" placeholder="1000" {...form.register('amount', { required: true })} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="deadline">Deadline</Label>
-                    <Input id="deadline" type="datetime-local" {...form.register('deadline')} />
-                  </div>
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="sellerWallet">Seller wallet</Label>
-                  <Input
-                    id="sellerWallet"
-                    placeholder="Base58 wallet của seller"
-                    {...form.register('sellerWallet')}
-                  />
-                </div>
-
-                {submitError ? (
-                  <Alert variant="danger" title="Không thể tạo deal">
-                    {submitError}
-                  </Alert>
-                ) : null}
-
-                <div className="flex flex-wrap gap-3">
-                  <Button type="submit" disabled={createDeal.isPending}>
-                    {createDeal.isPending ? 'Đang tạo...' : 'Tạo deal'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={!descriptionValue || analyzeDeal.isPending}
-                    onClick={() => analyzeDeal.mutate({ dealDescription: descriptionValue })}
-                  >
-                    {analyzeDeal.isPending ? 'Đang phân tích...' : 'AI review mô tả'}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>AI review</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {aiSummary ? (
-                <>
-                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={riskVariant(aiSummary.risk.level)}>
-                        {aiSummary.risk.level ?? 'unknown'}
-                      </Badge>
-                      <Badge variant="muted">score {aiSummary.risk.score ?? '—'}</Badge>
-                      <Badge variant={aiSummary.llmAvailable ? 'success' : 'warning'}>
-                        {aiSummary.llmAvailable ? 'LLM active' : 'fallback'}
-                      </Badge>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="type">Loại deal</Label>
+                      <Select id="type" options={DEAL_TYPE_OPTIONS as never} {...form.register('type')} />
                     </div>
-                    {aiSummary.risk.recommendation ? (
-                      <p className="mt-3 text-sm leading-relaxed text-zinc-300">
-                        {aiSummary.risk.recommendation}
-                      </p>
+                    <div className="grid gap-2">
+                      <Label htmlFor="token">Token</Label>
+                      <Select id="token" options={TOKEN_OPTIONS as never} {...form.register('token')} />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="amount">Số tiền</Label>
+                      <Input id="amount" placeholder="1000" {...form.register('amount', { required: true })} />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="deadline">Deadline</Label>
+                      <Input id="deadline" type="datetime-local" {...form.register('deadline')} />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="sellerWallet">Seller wallet</Label>
+                    <Input
+                      id="sellerWallet"
+                      placeholder="Base58 wallet của seller"
+                      {...form.register('sellerWallet')}
+                    />
+                  </div>
+
+                  {submitError ? (
+                    <Alert variant="danger" title="Không thể tạo deal">
+                      {submitError}
+                    </Alert>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button type="submit" disabled={createDeal.isPending}>
+                      {createDeal.isPending ? 'Đang tạo...' : 'Tạo deal'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={!descriptionValue || analyzeDeal.isPending}
+                      onClick={() => analyzeDeal.mutate({ dealDescription: descriptionValue })}
+                    >
+                      {analyzeDeal.isPending ? 'Đang phân tích...' : 'AI review mô tả'}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>AI review</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {aiSummary ? (
+                  <>
+                    <div className="rounded-xl border border-surface-200 bg-surface-50 p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={riskVariant(aiSummary.risk.level)}>
+                          {aiSummary.risk.level ?? 'unknown'}
+                        </Badge>
+                        <Badge variant="muted">score {aiSummary.risk.score ?? '—'}</Badge>
+                        <Badge variant={aiSummary.llmAvailable ? 'success' : 'warning'}>
+                          {aiSummary.llmAvailable ? 'LLM active' : 'fallback'}
+                        </Badge>
+                      </div>
+                      {aiSummary.risk.recommendation ? (
+                        <p className="mt-3 text-sm leading-relaxed text-surface-700">
+                          {aiSummary.risk.recommendation}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {textList(termRecord?.summary).length ? (
+                      <div className="rounded-xl border border-surface-200 bg-surface-50 p-4">
+                        <p className="mb-2 text-sm font-medium text-surface-800">Tóm tắt</p>
+                        <div className="space-y-2 text-sm text-surface-600">
+                          {textList(termRecord?.summary).map((item, index) => (
+                            <p key={index}>{item}</p>
+                          ))}
+                        </div>
+                      </div>
                     ) : null}
-                  </div>
 
-                  {textList(termRecord?.summary).length ? (
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="mb-2 text-sm font-medium text-zinc-100">Tóm tắt</p>
-                      <div className="space-y-2 text-sm text-zinc-400">
-                        {textList(termRecord?.summary).map((item, index) => (
-                          <p key={index}>{item}</p>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {objectList(termRecord?.deliverables).length ? (
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="mb-3 text-sm font-medium text-zinc-100">Deliverables</p>
-                      <div className="space-y-2">
-                        {objectList(termRecord?.deliverables).map((item, index) => (
-                          <div key={index} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-                            <p className="text-sm text-zinc-200">
-                              {String(item.description ?? item.name ?? `Deliverable ${index + 1}`)}
-                            </p>
-                            {item.deadline ? (
-                              <p className="mt-1 text-xs text-zinc-500">Deadline: {String(item.deadline)}</p>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {objectList(termRecord?.milestones).length ? (
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="mb-3 text-sm font-medium text-zinc-100">Milestones</p>
-                      <div className="space-y-2">
-                        {objectList(termRecord?.milestones).map((item, index) => (
-                          <div key={index} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-                            <p className="text-sm text-zinc-200">
-                              {String(item.name ?? `Milestone ${index + 1}`)}
-                            </p>
-                            {item.description ? (
-                              <p className="mt-1 text-xs text-zinc-500">{String(item.description)}</p>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {objectList(scamRecord?.flags).length ? (
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="mb-3 text-sm font-medium text-zinc-100">Cờ rủi ro</p>
-                      <div className="space-y-2">
-                        {objectList(scamRecord?.flags).map((flag, index) => (
-                          <div key={index} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant={riskVariant(String(flag.severity ?? 'medium'))}>
-                                {String(flag.severity ?? 'medium')}
-                              </Badge>
-                              <Badge variant="muted">{String(flag.type ?? 'flag')}</Badge>
+                    {objectList(termRecord?.deliverables).length ? (
+                      <div className="rounded-xl border border-surface-200 bg-surface-50 p-4">
+                        <p className="mb-3 text-sm font-medium text-surface-800">Deliverables</p>
+                        <div className="space-y-2">
+                          {objectList(termRecord?.deliverables).map((item, index) => (
+                            <div key={index} className="rounded-lg border border-surface-200 bg-white px-3 py-2">
+                              <p className="text-sm text-surface-800">
+                                {String(item.description ?? item.name ?? `Deliverable ${index + 1}`)}
+                              </p>
+                              {item.deadline ? (
+                                <p className="mt-1 text-xs text-surface-500">Deadline: {String(item.deadline)}</p>
+                              ) : null}
                             </div>
-                            <p className="mt-2 text-sm leading-relaxed text-zinc-300">
-                              {String(flag.description ?? '')}
-                            </p>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <Alert title="Chưa phân tích">
-                  Nhấn <strong>AI review mô tả</strong> để xem risk, deliverables và khuyến nghị.
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
+                    ) : null}
+
+                    {objectList(termRecord?.milestones).length ? (
+                      <div className="rounded-xl border border-surface-200 bg-surface-50 p-4">
+                        <p className="mb-3 text-sm font-medium text-surface-800">Milestones</p>
+                        <div className="space-y-2">
+                          {objectList(termRecord?.milestones).map((item, index) => (
+                            <div key={index} className="rounded-lg border border-surface-200 bg-white px-3 py-2">
+                              <p className="text-sm text-surface-800">
+                                {String(item.name ?? `Milestone ${index + 1}`)}
+                              </p>
+                              {item.description ? (
+                                <p className="mt-1 text-xs text-surface-500">{String(item.description)}</p>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {objectList(scamRecord?.flags).length ? (
+                      <div className="rounded-xl border border-surface-200 bg-surface-50 p-4">
+                        <p className="mb-3 text-sm font-medium text-surface-800">Cờ rủi ro</p>
+                        <div className="space-y-2">
+                          {objectList(scamRecord?.flags).map((flag, index) => (
+                            <div key={index} className="rounded-lg border border-surface-200 bg-white px-3 py-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant={riskVariant(String(flag.severity ?? 'medium'))}>
+                                  {String(flag.severity ?? 'medium')}
+                                </Badge>
+                                <Badge variant="muted">{String(flag.type ?? 'flag')}</Badge>
+                              </div>
+                              <p className="mt-2 text-sm leading-relaxed text-surface-700">
+                                {String(flag.description ?? '')}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <Alert title="Chưa phân tích">
+                    Nhấn <strong>AI review mô tả</strong> để xem risk, deliverables và khuyến nghị.
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </AppShell>
+      </AppLayout>
     </AuthGate>
   );
 }

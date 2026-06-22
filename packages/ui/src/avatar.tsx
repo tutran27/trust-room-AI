@@ -44,7 +44,7 @@ export const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
       <span
         aria-hidden="true"
         className={cn(
-          'inline-flex shrink-0 items-center justify-center rounded-lg font-semibold text-white/90 ring-1 ring-white/10',
+          'inline-flex shrink-0 items-center justify-center rounded-lg font-semibold text-white',
           SIZES[size],
         )}
         style={{ backgroundColor: colorFor(address) }}
@@ -52,7 +52,7 @@ export const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
         {address.slice(0, 2).toUpperCase()}
       </span>
       {showLabel ? (
-        <span className="font-mono text-xs text-zinc-400" title={address}>
+        <span className="font-mono text-xs text-surface-500" title={address}>
           {truncate(address)}
         </span>
       ) : null}

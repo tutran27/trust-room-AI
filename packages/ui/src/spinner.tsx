@@ -22,7 +22,7 @@ export const Spinner = React.forwardRef<HTMLSpanElement, SpinnerProps>(
       role="status"
       aria-label={label}
       className={cn(
-        'inline-block animate-spin rounded-full border-slate-700 border-t-emerald-400',
+        'inline-block animate-spin rounded-full border-surface-300 border-t-brand-500',
         SIZES[size],
         className,
       )}

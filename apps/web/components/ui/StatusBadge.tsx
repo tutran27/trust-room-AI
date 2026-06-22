@@ -12,33 +12,33 @@ interface StatusBadgeProps {
 
 const statusStyles: Record<string, string> = {
   // Deal statuses
-  created: 'bg-surface-500/20 text-surface-300 border-surface-500/30',
-  funded: 'bg-brand-500/20 text-brand-400 border-brand-500/30',
-  termsconfirmed: 'bg-accent-500/20 text-accent-400 border-accent-500/30',
-  deliverysubmitted: 'bg-warning-500/20 text-warning-400 border-warning-500/30',
-  released: 'bg-success-500/20 text-success-400 border-success-500/30',
-  refunded: 'bg-surface-500/20 text-surface-300 border-surface-500/30',
-  disputed: 'bg-danger-500/20 text-danger-400 border-danger-500/30',
+  created: 'bg-surface-50 text-surface-600 border-surface-200',
+  funded: 'bg-brand-50 text-brand-700 border-brand-200',
+  termsconfirmed: 'bg-accent-50 text-accent-700 border-accent-200',
+  deliverysubmitted: 'bg-warning-50 text-warning-700 border-warning-200',
+  released: 'bg-success-50 text-success-700 border-success-200',
+  refunded: 'bg-surface-50 text-surface-600 border-surface-200',
+  disputed: 'bg-danger-50 text-danger-700 border-danger-200',
   // General statuses
-  active: 'bg-success-500/20 text-success-400 border-success-500/30',
-  pending: 'bg-warning-500/20 text-warning-400 border-warning-500/30',
-  completed: 'bg-success-500/20 text-success-400 border-success-500/30',
-  cancelled: 'bg-surface-500/20 text-surface-300 border-surface-500/30',
-  resolved: 'bg-success-500/20 text-success-400 border-success-500/30',
-  in_progress: 'bg-brand-500/20 text-brand-400 border-brand-500/30',
-  open: 'bg-brand-500/20 text-brand-400 border-brand-500/30',
-  closed: 'bg-surface-500/20 text-surface-300 border-surface-500/30',
-  won: 'bg-success-500/20 text-success-400 border-success-500/30',
-  lost: 'bg-danger-500/20 text-danger-400 border-danger-500/30',
-  expired: 'bg-warning-500/20 text-warning-400 border-warning-500/30',
-  scheduled: 'bg-accent-500/20 text-accent-400 border-accent-500/30',
-  underreview: 'bg-brand-500/20 text-brand-400 border-brand-500/30',
-  escalated: 'bg-danger-500/20 text-danger-400 border-danger-500/30',
+  active: 'bg-success-50 text-success-700 border-success-200',
+  pending: 'bg-warning-50 text-warning-700 border-warning-200',
+  completed: 'bg-success-50 text-success-700 border-success-200',
+  cancelled: 'bg-surface-50 text-surface-600 border-surface-200',
+  resolved: 'bg-success-50 text-success-700 border-success-200',
+  in_progress: 'bg-brand-50 text-brand-700 border-brand-200',
+  open: 'bg-brand-50 text-brand-700 border-brand-200',
+  closed: 'bg-surface-50 text-surface-600 border-surface-200',
+  won: 'bg-success-50 text-success-700 border-success-200',
+  lost: 'bg-danger-50 text-danger-700 border-danger-200',
+  expired: 'bg-warning-50 text-warning-700 border-warning-200',
+  scheduled: 'bg-accent-50 text-accent-700 border-accent-200',
+  underreview: 'bg-brand-50 text-brand-700 border-brand-200',
+  escalated: 'bg-danger-50 text-danger-700 border-danger-200',
 };
 
 export function StatusBadge({ status, type, className }: StatusBadgeProps) {
   const normalizedStatus = status?.toLowerCase().replace(/\s+/g, '_') || 'pending';
-  const style = statusStyles[normalizedStatus] || 'bg-surface-500/20 text-surface-300 border-surface-500/30';
+  const style = statusStyles[normalizedStatus] || 'bg-surface-50 text-surface-600 border-surface-200';
 
   return (
     <span className={cn(

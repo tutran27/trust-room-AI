@@ -1,15 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import {
-  getDemoAddress,
-  hasPhantom,
-  connectPhantom,
-  signAuthMessage,
-  shortAddress,
-  type WalletKind,
-} from '@/lib/wallet';
-import { apiFetch } from '@/lib/api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getDemoAddress, signAuthMessage, shortAddress as fmtShortAddr, type WalletKind } from '@/lib/wallet';
+import { apiFetch, getToken, setToken } from '@/lib/api';
+
+const WALLET_KIND_KEY = 'trustroom_wallet_kind';
 
 interface AuthState {
   isConnected: boolean;
@@ -30,35 +25,38 @@ export function useAuth() {
     walletKind: null,
   });
 
-  // Restore session from localStorage on mount
+  // Restore session from stored token on mount (same key as AuthProvider)
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('trustroom_auth');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.address && parsed.token) {
-          setState({
-            isConnected: true,
-            isConnecting: false,
-            address: parsed.address,
-            shortAddress: shortAddress(parsed.address),
-            token: parsed.token,
-            walletKind: parsed.walletKind || 'demo',
-          });
-        }
-      }
-    } catch {
-      // ignore
-    }
+    const token = getToken();
+    if (!token) return;
+    const storedKind = localStorage.getItem(WALLET_KIND_KEY) as WalletKind | null;
+    apiFetch<{ wallet: string; walletAddress?: string }>('/auth/session')
+      .then((session) => {
+        const addr = session.wallet ?? session.walletAddress ?? null;
+        setState({
+          isConnected: true,
+          isConnecting: false,
+          address: addr,
+          shortAddress: addr ? fmtShortAddr(addr) : '—',
+          token,
+          walletKind: storedKind || 'demo',
+        });
+      })
+      .catch(() => {
+        // Session expired — clear
+        setToken(null);
+        localStorage.removeItem(WALLET_KIND_KEY);
+      });
   }, []);
 
   const connect = useCallback(async (kind: WalletKind = 'demo') => {
     setState((s) => ({ ...s, isConnecting: true }));
 
     try {
+      // 1. Get wallet address
       let address: string;
-
       if (kind === 'phantom') {
+        const { connectPhantom, hasPhantom } = await import('@/lib/wallet');
         if (!hasPhantom()) {
           throw new Error('Phantom wallet not found. Please install the Phantom extension.');
         }
@@ -67,36 +65,40 @@ export function useAuth() {
         address = getDemoAddress();
       }
 
-      // Get nonce from API
-      const nonceRes = await apiFetch<{ nonce: string }>(`/auth/nonce/${address}`);
-      const nonce = nonceRes.nonce;
-
-      // Sign the auth message
-      const message = `TrustRoom Authentication\nAddress: ${address}\nNonce: ${nonce}`;
-      const { signature } = await signAuthMessage(kind, message);
-
-      // Verify with API
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const verifyRes = await fetch(`${apiBase}/auth/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, signature, nonce }),
-      }).then((r) => r.json()) as { access_token: string };
-
-      const token = verifyRes.access_token;
-
-      // Save session
-      localStorage.setItem(
-        'trustroom_auth',
-        JSON.stringify({ address, token, walletKind: kind })
+      // 2. Get nonce from API
+      const nonceRes = await apiFetch<{ challengeId: string; nonce: string; message: string }>(
+        '/auth/nonce',
+        { method: 'POST', auth: false, body: { walletAddress: address } },
       );
+
+      // 3. Sign the message
+      const signed = await signAuthMessage(kind, nonceRes.message);
+
+      // 4. Verify signature
+      const result = await apiFetch<{ accessToken: string; userId: string; walletAddress: string }>(
+        '/auth/verify-signature',
+        {
+          method: 'POST',
+          auth: false,
+          body: {
+            challengeId: nonceRes.challengeId,
+            walletAddress: signed.address,
+            nonce: nonceRes.nonce,
+            signature: signed.signature,
+          },
+        },
+      );
+
+      // 5. Save session
+      setToken(result.accessToken);
+      localStorage.setItem(WALLET_KIND_KEY, kind);
 
       setState({
         isConnected: true,
         isConnecting: false,
-        address,
-        shortAddress: shortAddress(address),
-        token,
+        address: result.walletAddress,
+        shortAddress: fmtShortAddr(result.walletAddress),
+        token: result.accessToken,
         walletKind: kind,
       });
     } catch (err) {
@@ -106,7 +108,8 @@ export function useAuth() {
   }, []);
 
   const disconnect = useCallback(() => {
-    localStorage.removeItem('trustroom_auth');
+    setToken(null);
+    localStorage.removeItem(WALLET_KIND_KEY);
     setState({
       isConnected: false,
       isConnecting: false,
@@ -121,6 +124,5 @@ export function useAuth() {
     ...state,
     connect,
     disconnect,
-    hasPhantom: hasPhantom(),
   };
 }

@@ -4,17 +4,17 @@ import { cn } from './cn.js';
 type AlertVariant = 'info' | 'success' | 'warning' | 'danger';
 
 const VARIANTS: Record<AlertVariant, string> = {
-  info: 'border-sky-500/20 bg-sky-500/[0.06]',
-  success: 'border-emerald-500/20 bg-emerald-500/[0.06]',
-  warning: 'border-amber-500/20 bg-amber-500/[0.06]',
-  danger: 'border-red-500/20 bg-red-500/[0.06]',
+  info: 'border-sky-200 bg-sky-50',
+  success: 'border-emerald-200 bg-emerald-50',
+  warning: 'border-amber-200 bg-amber-50',
+  danger: 'border-red-200 bg-red-50',
 };
 
 const TITLE_COLORS: Record<AlertVariant, string> = {
-  info: 'text-sky-400',
-  success: 'text-emerald-400',
-  warning: 'text-amber-400',
-  danger: 'text-red-400',
+  info: 'text-sky-800',
+  success: 'text-emerald-800',
+  warning: 'text-amber-800',
+  danger: 'text-red-800',
 };
 
 export interface AlertProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -38,7 +38,7 @@ export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
       {title ? (
         <p className={cn('mb-1 font-semibold', TITLE_COLORS[variant])}>{title}</p>
       ) : null}
-      {children ? <div className="text-zinc-300">{children}</div> : null}
+      {children ? <div className="text-surface-700">{children}</div> : null}
     </div>
   ),
 );

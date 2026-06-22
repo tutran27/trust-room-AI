@@ -59,6 +59,12 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   const payload = text ? safeJson(text) : null;
 
   if (!response.ok) {
+    // Auto-logout on 401 — clear token so AuthGate shows connect screen
+    if (response.status === 401 && auth) {
+      setToken(null);
+      localStorage.removeItem(TOKEN_KEY);
+    }
+
     const objectPayload = payload as
       | {
           error?: { code?: string; message?: string };

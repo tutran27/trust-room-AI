@@ -8,11 +8,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantStyles = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-500 shadow-lg shadow-brand-500/20',
-  secondary: 'bg-surface-100 text-surface-800 hover:bg-surface-200 border border-surface-300',
-  ghost: 'text-surface-700 hover:text-surface-900 hover:bg-surface-100',
-  danger: 'bg-danger-500 text-white hover:bg-danger-600 shadow-lg shadow-danger-500/20',
-  outline: 'border border-surface-300 text-surface-300 hover:bg-surface-100 hover:text-surface-200',
+  primary: 'bg-brand-600 text-white hover:bg-brand-500 shadow-sm shadow-brand-500/20 active:bg-brand-700',
+  secondary: 'bg-white text-surface-700 hover:bg-surface-50 border border-surface-300 shadow-sm',
+  ghost: 'text-surface-600 hover:text-surface-800 hover:bg-surface-100',
+  danger: 'bg-danger-600 text-white hover:bg-danger-500 shadow-sm shadow-danger-500/20 active:bg-danger-700',
+  outline: 'border border-surface-300 text-surface-600 hover:bg-surface-50 hover:text-surface-800',
 };
 
 const sizeStyles = {
@@ -28,8 +28,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={cn(
           'inline-flex items-center justify-center rounded-lg font-medium transition-all',
-          'focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:ring-offset-2 focus:ring-offset-surface-950',
+          'focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:ring-offset-2 focus:ring-offset-white',
           'disabled:opacity-50 disabled:cursor-not-allowed',
+          'active:scale-[0.98]',
           variantStyles[variant],
           sizeStyles[size],
           className

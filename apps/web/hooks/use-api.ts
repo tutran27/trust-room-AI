@@ -94,6 +94,22 @@ export function useInviteSeller(dealId: string) {
   });
 }
 
+
+
+export function useDeleteDeal(dealId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ success: boolean }>(`/deals/${dealId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.removeQueries({ queryKey: ['deal', dealId] });
+    },
+  });
+}
+
 // ── Escrow ─────────────────────────────────────────────
 export function useEscrowByDeal(dealId: string | null) {
   return useQuery({

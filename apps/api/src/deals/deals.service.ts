@@ -72,7 +72,7 @@ export class DealsService {
   }
 
   async findAll(actorWallet: string, query: ListDealsDto) {
-    const limit = query.limit ?? 20;
+    const limit = Number(query.limit) || 20;
     const cursor = query.cursor ? decodeCursor(query.cursor) : null;
 
     const deals = await this.prisma.deal.findMany({
@@ -407,6 +407,19 @@ export class DealsService {
       { action: 'cancel', expectedVersion, reason },
       actorWallet,
     );
+  }
+
+  async remove(dealId: string, actorWallet: string) {
+    const current = await this.loadAuthorizedDeal(dealId, actorWallet);
+    this.assertBuyer(current.participants, actorWallet);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.dealEvent.deleteMany({ where: { dealId } });
+      await tx.dealParticipant.deleteMany({ where: { dealId } });
+      await tx.deal.delete({ where: { id: dealId } });
+    });
+
+    return { success: true };
   }
 
   private async loadAuthorizedDeal(dealId: string, actorWallet: string) {

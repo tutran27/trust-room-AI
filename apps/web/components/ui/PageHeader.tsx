@@ -14,16 +14,16 @@ export function PageHeader({ title, description, action, actions, breadcrumbs, c
   return (
     <div className={cn('mb-8', className)}>
       {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav className="mb-4 flex items-center space-x-2 text-sm text-surface-400">
+        <nav className="mb-4 flex items-center space-x-2 text-sm text-surface-500">
           {breadcrumbs.map((crumb, index) => (
             <span key={index} className="flex items-center">
-              {index > 0 && <span className="mx-2 text-surface-500">/</span>}
+              {index > 0 && <span className="mx-2 text-surface-400">/</span>}
               {crumb.href ? (
-                <a href={crumb.href} className="hover:text-brand-400 transition-colors">
+                <a href={crumb.href} className="hover:text-brand-600 transition-colors">
                   {crumb.label}
                 </a>
               ) : (
-                <span className="text-surface-200">{crumb.label}</span>
+                <span className="text-surface-800">{crumb.label}</span>
               )}
             </span>
           ))}
@@ -31,9 +31,9 @@ export function PageHeader({ title, description, action, actions, breadcrumbs, c
       )}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-surface-50">{title}</h1>
+          <h1 className="text-2xl font-bold text-surface-900">{title}</h1>
           {description && (
-            <p className="mt-1 text-sm text-surface-400">{description}</p>
+            <p className="mt-1 text-sm text-surface-500">{description}</p>
           )}
         </div>
         {(action || actions) && <div>{action || actions}</div>}

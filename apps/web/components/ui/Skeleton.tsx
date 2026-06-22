@@ -23,9 +23,9 @@ export function Skeleton({ className = '', count = 1, variant = 'text', rounded 
     return items.map((i) => (
       <Card key={i} padding="md" className={`animate-pulse ${className}`}>
         <div className="space-y-3">
-          <div className="h-4 bg-dark-700 rounded-md w-1/3" />
-          <div className="h-8 bg-dark-700 rounded-md w-1/2" />
-          <div className="h-3 bg-dark-700 rounded-md w-2/3" />
+          <div className="h-4 bg-surface-200 rounded-md w-1/3" />
+          <div className="h-8 bg-surface-200 rounded-md w-1/2" />
+          <div className="h-3 bg-surface-200 rounded-md w-2/3" />
         </div>
       </Card>
     ));
@@ -36,11 +36,11 @@ export function Skeleton({ className = '', count = 1, variant = 'text', rounded 
       <Card key={i} padding="md" className={`animate-pulse ${className}`}>
         <div className="flex items-start justify-between">
           <div className="flex-1 space-y-3">
-            <div className="h-3 bg-dark-700 rounded-md w-24" />
-            <div className="h-7 bg-dark-700 rounded-md w-16" />
-            <div className="h-3 bg-dark-700 rounded-md w-32" />
+            <div className="h-3 bg-surface-200 rounded-md w-24" />
+            <div className="h-7 bg-surface-200 rounded-md w-16" />
+            <div className="h-3 bg-surface-200 rounded-md w-32" />
           </div>
-          <div className="w-10 h-10 bg-dark-700 rounded-xl" />
+          <div className="w-10 h-10 bg-surface-200 rounded-xl" />
         </div>
       </Card>
     ));
@@ -50,7 +50,7 @@ export function Skeleton({ className = '', count = 1, variant = 'text', rounded 
     return items.map((i) => (
       <div
         key={i}
-        className={`w-10 h-10 bg-dark-700 animate-pulse ${roundedClasses.full} ${className}`}
+        className={`w-10 h-10 bg-surface-200 animate-pulse ${roundedClasses.full} ${className}`}
       />
     ));
   }
@@ -59,7 +59,7 @@ export function Skeleton({ className = '', count = 1, variant = 'text', rounded 
     return items.map((i) => (
       <div
         key={i}
-        className={`h-5 bg-dark-700 animate-pulse ${roundedClasses.full} w-16 ${className}`}
+        className={`h-5 bg-surface-200 animate-pulse ${roundedClasses.full} w-16 ${className}`}
       />
     ));
   }
@@ -68,7 +68,7 @@ export function Skeleton({ className = '', count = 1, variant = 'text', rounded 
     return items.map((i) => (
       <div
         key={i}
-        className={`h-9 bg-dark-700 animate-pulse ${roundedClasses.lg} w-24 ${className}`}
+        className={`h-9 bg-surface-200 animate-pulse ${roundedClasses.lg} w-24 ${className}`}
       />
     ));
   }
@@ -77,7 +77,7 @@ export function Skeleton({ className = '', count = 1, variant = 'text', rounded 
     return items.map((i) => (
       <div
         key={i}
-        className={`h-6 bg-dark-700 animate-pulse ${roundedClasses[rounded]} w-48 ${className}`}
+        className={`h-6 bg-surface-200 animate-pulse ${roundedClasses[rounded]} w-48 ${className}`}
       />
     ));
   }
@@ -86,7 +86,7 @@ export function Skeleton({ className = '', count = 1, variant = 'text', rounded 
     return items.map((i) => (
       <div
         key={i}
-        className={`w-full h-48 bg-dark-700 animate-pulse ${roundedClasses.lg} ${className}`}
+        className={`w-full h-48 bg-surface-200 animate-pulse ${roundedClasses.lg} ${className}`}
       />
     ));
   }
@@ -94,7 +94,7 @@ export function Skeleton({ className = '', count = 1, variant = 'text', rounded 
   return items.map((i) => (
     <div
       key={i}
-      className={`h-4 bg-dark-700 animate-pulse ${roundedClasses[rounded]} ${className}`}
+      className={`h-4 bg-surface-200 animate-pulse ${roundedClasses[rounded]} ${className}`}
     />
   ));
 }

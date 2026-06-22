@@ -1,6 +1,5 @@
 'use client';
 
-<<<<<<< Updated upstream
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -33,31 +32,168 @@ import {
   useMeetingTranscripts,
   useStartMeetingStt,
   useStopMeetingStt,
-  useUpdateMeetingStatus,
 } from '../../../hooks/use-api';
 import { type AgoraRealtimeTranscriptChunk } from '../../../lib/agora-stt';
 import { formatRelativeTime } from '../../../lib/format';
 import { shortAddress } from '../../../lib/wallet';
 import { useAuth } from '../../../providers/auth-provider';
 import { useSocket } from '../../../providers/socket-provider';
-=======
-import { useParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { AuthGate } from '@/components/auth-gate';
-import { useMeeting, useMeetingTranscripts, useMeetingRiskEvents } from '@/hooks/use-api';
-import { formatDateTime } from '@/lib/format';
-import { shortAddress } from '@/lib/wallet';
->>>>>>> Stashed changes
 
-export default function MeetingRoomPage() {
+interface RealtimeEntry {
+  id: string;
+  speakerLabel: string;
+  text: string;
+  language: string;
+  translatedText: string | null;
+  targetLanguage: string | null;
+  startTime: number | null;
+  endTime: number | null;
+  isFinal: boolean;
+  updatedAt: number;
+}
+
+function mergeRealtimeText(currentText: string, nextText: string) {
+  const left = currentText.trim();
+  const right = nextText.trim();
+
+  if (!left) return right;
+  if (!right) return left;
+  if (left === right || left.endsWith(right)) {
+    return left;
+  }
+  if (right.startsWith(left)) {
+    return right;
+  }
+
+  const leftWords = left.split(/\s+/);
+  const rightWords = right.split(/\s+/);
+  const maxOverlap = Math.min(leftWords.length, rightWords.length, 12);
+
+  for (let overlap = maxOverlap; overlap >= 1; overlap -= 1) {
+    const leftSuffix = leftWords.slice(-overlap).join(' ');
+    const rightPrefix = rightWords.slice(0, overlap).join(' ');
+    if (leftSuffix === rightPrefix) {
+      return `${left} ${rightWords.slice(overlap).join(' ')}`.trim();
+    }
+  }
+
+  return `${left} ${right}`.trim();
+}
+
+function groupRealtimeEntries(entries: RealtimeEntry[]) {
+  const grouped: RealtimeEntry[] = [];
+
+  for (const entry of [...entries].sort((left, right) => left.updatedAt - right.updatedAt)) {
+    const previous = grouped[grouped.length - 1];
+    const canMerge =
+      previous &&
+      previous.speakerLabel === entry.speakerLabel &&
+      previous.language === entry.language;
+
+    if (!canMerge) {
+      grouped.push({ ...entry });
+      continue;
+    }
+
+    grouped[grouped.length - 1] = {
+      ...previous,
+      id: entry.id,
+      text: mergeRealtimeText(previous.text, entry.text),
+      translatedText:
+        previous.translatedText || entry.translatedText
+          ? mergeRealtimeText(previous.translatedText ?? '', entry.translatedText ?? '')
+          : null,
+      targetLanguage: entry.targetLanguage ?? previous.targetLanguage,
+      endTime: entry.endTime ?? previous.endTime,
+      isFinal: entry.isFinal,
+      updatedAt: entry.updatedAt,
+    };
+  }
+
+  return grouped;
+}
+
+const STT_LANGUAGE_OPTIONS = [
+  { label: 'Tiếng Việt', value: 'vi-VN' },
+  { label: 'English', value: 'en-US' },
+  { label: '中文', value: 'zh-CN' },
+  { label: '日本語', value: 'ja-JP' },
+  { label: '한국어', value: 'ko-KR' },
+];
+
+const STT_TARGET_LANGUAGE_OPTIONS = [
+  { label: 'Không dịch', value: '' },
+  { label: 'Dịch sang Tiếng Việt', value: 'vi-VN' },
+  { label: 'Dịch sang English', value: 'en-US' },
+  { label: 'Dịch sang 中文', value: 'zh-CN' },
+  { label: 'Dịch sang 日本語', value: 'ja-JP' },
+  { label: 'Dịch sang 한국어', value: 'ko-KR' },
+];
+
+function riskVariant(severity?: string) {
+  const normalized = String(severity ?? '').toLowerCase();
+  if (normalized === 'critical' || normalized === 'high') return 'danger' as const;
+  if (normalized === 'medium' || normalized === 'warning') return 'warning' as const;
+  if (normalized === 'low' || normalized === 'info') return 'info' as const;
+  return 'muted' as const;
+}
+
+function getTranscriptRiskSummary(
+  transcriptId: string,
+  riskEvents: Array<{ transcriptId: string | null; severity: string; type: string }>,
+) {
+  const matches = riskEvents.filter((item) => item.transcriptId === transcriptId);
+  return {
+    count: matches.length,
+    labels: matches.slice(0, 3).map((item) => item.type),
+    highestSeverity:
+      matches.find((item) => ['critical', 'high'].includes(item.severity.toLowerCase()))?.severity ??
+      matches[0]?.severity ??
+      null,
+  };
+}
+
+function getRiskEvidenceDetails(evidence: unknown) {
+  if (!evidence || typeof evidence !== 'object') {
+    return { matchedKeyword: null as string | null, score: null as number | null };
+  }
+
+  const record = evidence as { matchedKeyword?: unknown; score?: unknown };
+  return {
+    matchedKeyword:
+      typeof record.matchedKeyword === 'string' && record.matchedKeyword.trim()
+        ? record.matchedKeyword.trim()
+        : null,
+    score: typeof record.score === 'number' && Number.isFinite(record.score) ? record.score : null,
+  };
+}
+
+function buildRiskFeedMessage(
+  event: { description: string; evidence: unknown; transcriptId: string | null },
+  transcriptContent: string | null,
+) {
+  const evidence = getRiskEvidenceDetails(event.evidence);
+  const parts: string[] = [event.description];
+
+  if (evidence.matchedKeyword) {
+    parts.push(`Từ khóa nghi ngờ: "${evidence.matchedKeyword}".`);
+  }
+
+  if (transcriptContent) {
+    parts.push(`Đoạn hội thoại: "${transcriptContent}".`);
+  }
+
+  if (evidence.score !== null) {
+    parts.push(`Điểm rủi ro: ${evidence.score}.`);
+  }
+
+  return parts.join(' ');
+}
+
+export default function MeetingDetailPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const meetingId = params?.id ?? null;
-<<<<<<< Updated upstream
   const { address, status: authStatus } = useAuth();
   const { socket, joinMeeting, leaveMeeting } = useSocket();
 
@@ -65,7 +201,6 @@ export default function MeetingRoomPage() {
   const transcriptsQuery = useMeetingTranscripts(meetingId);
   const riskQuery = useMeetingRiskEvents(meetingId);
   const sttStateQuery = useMeetingSttState(meetingId);
-  const statusMutation = useUpdateMeetingStatus(meetingId ?? '');
   const inviteMutation = useCreateMeetingInvite(meetingId ?? '');
   const joinMutation = useJoinMeetingByToken();
   const addTranscriptMutation = useAddMeetingTranscript(meetingId ?? '');
@@ -104,7 +239,10 @@ export default function MeetingRoomPage() {
   const [sttLanguageInput, setSttLanguageInput] = useState('vi-VN');
   const [sttTargetLanguageInput, setSttTargetLanguageInput] = useState('');
   const [realtimeEntries, setRealtimeEntries] = useState<RealtimeEntry[]>([]);
-  const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
+  const [hasJoinedRoom, setHasJoinedRoom] = useState(
+    () => meetingId && typeof window !== 'undefined'
+      && sessionStorage.getItem(`meeting_joined_${meetingId}`) === 'true'
+  );
   const [displayName, setDisplayName] = useState('');
   const [realtimeNotice, setRealtimeNotice] = useState('');
   const [realtimeTransportState, setRealtimeTransportState] = useState<
@@ -145,33 +283,14 @@ export default function MeetingRoomPage() {
     : isRealtimeRunning
       ? 'on'
       : 'off';
-  const realtimeNoticeLower = (realtimeNotice ?? '').toLowerCase();
-  const startSttErrorMessage =
-    startSttMutation.error instanceof Error
-      ? startSttMutation.error.message
-      : 'Lỗi không xác định.';
   const startRealtimeDisabled =
     startSttMutation.isPending || !meetingId || isRealtimeRunning;
-  const startRealtimeDisabledReason = startSttMutation.isPending
-    ? 'Hệ thống đang gửi yêu cầu bật realtime transcript.'
-    : !meetingId
-      ? 'Meeting chưa sẵn sàng nên chưa thể bật realtime.'
-      : isRealtimeRunning
-        ? 'Realtime transcript đang ở trạng thái chạy. Hãy tắt trước nếu bạn muốn bật lại.'
-        : null;
-=======
-  const meeting = useMeeting(meetingId);
-  const transcript = useMeetingTranscripts(meetingId);
-  const riskAlerts = useMeetingRiskEvents(meetingId);
-  const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const [activeTab, setActiveTab] = useState<'transcript' | 'alerts' | 'ai'>('transcript');
->>>>>>> Stashed changes
 
   useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [transcript.data]);
+    if (!address) return;
+    setSpeakerLabel((current) => current || shortAddress(address, 6, 6));
+  }, [address]);
 
-<<<<<<< Updated upstream
   // When user picks a display name in lobby, use it as speakerLabel
   useEffect(() => {
     if (displayName.trim()) {
@@ -427,6 +546,13 @@ export default function MeetingRoomPage() {
     setTranscriptContent('');
   }
 
+  function handleLeaveRoom() {
+    if (meetingId) {
+      sessionStorage.removeItem(`meeting_joined_${meetingId}`);
+    }
+    setHasJoinedRoom(false);
+  }
+
   return (
     <AuthGate>
       <AppShell
@@ -458,7 +584,10 @@ export default function MeetingRoomPage() {
             meetingTitle={meeting.title}
             displayName={displayName}
             onDisplayNameChange={setDisplayName}
-            onJoin={() => setHasJoinedRoom(true)}
+            onJoin={() => {
+              if (meetingId) sessionStorage.setItem(`meeting_joined_${meetingId}`, 'true');
+              setHasJoinedRoom(true);
+            }}
             joinDisabled={!displayName.trim()}
             joinLoading={tokenQuery.isLoading}
             error={tokenQuery.error instanceof Error ? tokenQuery.error.message : null}
@@ -468,7 +597,7 @@ export default function MeetingRoomPage() {
             <div className="space-y-6">
               {/* Call Room Card */}
               <Card className="overflow-hidden">
-                <CardHeader className="border-b border-white/[0.06] pb-5">
+                <CardHeader className="border-b border-slate-200 pb-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -486,321 +615,392 @@ export default function MeetingRoomPage() {
                         </Badge>
                         <Badge variant="muted">{meeting.participants?.length ?? 0} participants</Badge>
                         <Badge variant="muted">{transcripts.length} transcripts</Badge>
-=======
-  const meetingData = meeting.data as any;
-  const transcriptData = transcript.data as any;
-  const riskAlertsData = riskAlerts.data as any;
-
-  return (
-    <AuthGate>
-      <AppLayout>
-        <div className="space-y-6">
-          {/* Header */}
-          {meeting.isLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-8 w-64 rounded-xl" />
-              <Skeleton className="h-4 w-96 rounded-lg" />
-            </div>
-          ) : meeting.isError || !meetingData ? (
-            <Card padding="lg">
-              <div className="text-center py-8">
-                <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                  </svg>
-                </div>
-                <p className="text-red-600 font-medium">Failed to load meeting</p>
-                <p className="text-sm text-surface-500 mt-1">
-                  {meeting.error instanceof Error ? meeting.error.message : 'Meeting not found.'}
-                </p>
-              </div>
-            </Card>
-          ) : (
-            <>
-              {/* Meeting Header */}
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h1 className="text-xl font-bold text-surface-900">Meeting Room</h1>
-<Badge variant={meetingData.status === 'Active' ? 'success' : meetingData.status === 'Scheduled' ? 'info' : 'default'} dot>
-                      {meetingData.status}
-                    </Badge>
-                  </div>
-                  <p className="mt-1 text-sm text-surface-500">
-                    {meetingData.deal?.title ?? meetingData.dealId} · {formatDateTime(meetingData.scheduledAt)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {meetingData.agoraChannel ? (
-                    <Button variant="primary" size="sm">
-                      <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-                      </svg>
-                      Join Call
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Main Content Grid */}
-              <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-                {/* Left: Transcript / Alerts */}
-                <div className="space-y-6">
-                  {/* Tab Bar */}
-                  <div className="flex items-center gap-1 rounded-xl bg-surface-100 p-1">
-                    {([
-                      { key: 'transcript' as const, label: 'Transcript', count: transcriptData?.length },
-                      { key: 'alerts' as const, label: 'Risk Alerts', count: riskAlertsData?.length },
-                    ]).map((tab) => (
-                      <button
-                        key={tab.key}
-                        onClick={() => setActiveTab(tab.key)}
-                        className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all flex-1 justify-center ${
-                          activeTab === tab.key
-                            ? 'bg-white text-surface-900 shadow-sm'
-                            : 'text-surface-500 hover:text-surface-700'
-                        }`}
-                      >
-                        {tab.label}
-                        {tab.count !== undefined && tab.count > 0 ? (
-                          <span className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-xs font-semibold ${
-                            activeTab === tab.key ? 'bg-primary-100 text-primary-700' : 'bg-surface-200 text-surface-500'
-                          }`}>
-                            {tab.count}
-                          </span>
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Transcript Panel */}
-                  {activeTab === 'transcript' && (
-                    <Card padding="none">
-                      <div className="border-b border-surface-200 px-5 py-3.5">
-                        <h3 className="text-sm font-semibold text-surface-900">Live Transcript</h3>
-                      </div>
-                      <div className="h-[480px] overflow-y-auto">
-                        {transcript.isLoading ? (
-                          <div className="space-y-4 p-5">
-                            {Array.from({ length: 6 }).map((_, i) => (
-                              <div key={i} className="flex gap-3">
-                                <Skeleton className="h-8 w-8 rounded-full shrink-0" />
-                                <div className="flex-1 space-y-2">
-                                  <Skeleton className="h-3 w-24 rounded-lg" />
-                                  <Skeleton className="h-4 w-full rounded-lg" />
-                                  <Skeleton className="h-4 w-3/4 rounded-lg" />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : transcriptData && transcriptData.length > 0 ? (
-                          <div className="divide-y divide-surface-100">
-                            {transcriptData.map((entry: any) => (
-                              <div key={entry.id} className="px-5 py-4 hover:bg-surface-50/50 transition-colors">
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-primary-700 text-xs font-bold">
-                                    {(entry.speaker ?? 'U').charAt(0).toUpperCase()}
-                                  </div>
-                                  <span className="text-xs font-semibold text-surface-700">{entry.speaker ?? 'Unknown'}</span>
-                                  <span className="text-xs text-surface-400">{formatDateTime(entry.timestamp)}</span>
-                                </div>
-                                <p className="text-sm text-surface-600 leading-relaxed pl-8">{entry.text}</p>
-                              </div>
-                            ))}
-                            <div ref={transcriptEndRef} />
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center py-16 px-5">
-                            <div className="w-12 h-12 rounded-full bg-surface-100 flex items-center justify-center mb-3">
-                              <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                              </svg>
-                            </div>
-                            <p className="text-sm font-medium text-surface-600">No transcript yet</p>
-                            <p className="text-xs text-surface-400 mt-1">Transcript will appear here once the meeting starts.</p>
-                          </div>
-                        )}
-                      </div>
-                    </Card>
-                  )}
-
-                  {/* Risk Alerts Panel */}
-                  {activeTab === 'alerts' && (
-                    <Card padding="none">
-                      <div className="border-b border-surface-200 px-5 py-3.5">
-                        <h3 className="text-sm font-semibold text-surface-900">Risk Alerts</h3>
-                      </div>
-                      <div className="h-[480px] overflow-y-auto">
-                        {riskAlerts.isLoading ? (
-                          <div className="space-y-3 p-5">
-                            {Array.from({ length: 3 }).map((_, i) => (
-                              <Skeleton key={i} className="h-24 rounded-xl" />
-                            ))}
-                          </div>
-                        ) : riskAlertsData && riskAlertsData.length > 0 ? (
-                          <div className="divide-y divide-surface-100">
-                            {riskAlertsData.map((alert: any) => (
-                              <div key={alert.id} className="px-5 py-4 hover:bg-surface-50/50 transition-colors">
-                                <div className="flex items-start gap-3">
-                                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                                    alert.severity === 'high' ? 'bg-red-100 text-red-600' :
-                                    alert.severity === 'medium' ? 'bg-amber-100 text-amber-600' :
-                                    'bg-surface-100 text-surface-500'
-                                  }`}>
-                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                                    </svg>
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <Badge variant={alert.severity === 'high' ? 'danger' : alert.severity === 'medium' ? 'warning' : 'default'} size="sm">
-                                        {alert.severity}
-                                      </Badge>
-                                      <span className="text-xs text-surface-400">{formatDateTime(alert.timestamp)}</span>
-                                    </div>
-                                    <p className="text-sm text-surface-700 leading-relaxed">{alert.message}</p>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center py-16 px-5">
-                            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mb-3">
-                              <svg className="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            </div>
-                            <p className="text-sm font-medium text-surface-600">No risk alerts</p>
-                            <p className="text-xs text-surface-400 mt-1">All clear — no risks detected in this meeting.</p>
-                          </div>
-                        )}
-                      </div>
-                    </Card>
-                  )}
-                </div>
-
-                {/* Right Sidebar: AI Panel + Participants */}
-                <div className="space-y-6">
-                  {/* AI Assistant Panel */}
-                  <Card>
-                    <div className="flex items-center gap-2.5 mb-5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 shadow-sm">
-                        <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                        </svg>
->>>>>>> Stashed changes
                       </div>
                       <div>
-                        <h3 className="text-sm font-semibold text-surface-900">AI Assistant</h3>
-                        <p className="text-xs text-surface-400">Real-time analysis</p>
+                        <CardTitle className="text-lg">Call room</CardTitle>
                       </div>
                     </div>
+                    <div className="flex flex-wrap gap-2">
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <MeetingRtcPanel
+                    meetingId={meeting.id}
+                    title={meeting.title}
+                    appId={process.env.NEXT_PUBLIC_AGORA_APP_ID}
+                    token={tokenQuery.data?.token}
+                    tokenLoading={tokenQuery.isLoading || tokenQuery.isFetching}
+                    tokenError={tokenQuery.error instanceof Error ? tokenQuery.error.message : null}
+                    uid={agoraUid}
+                    walletAddress={address}
+                    sttPusherUid={sttState?.pusherUid ?? null}
+                    onRealtimeTranscript={handleRealtimeTranscript}
+                    onRealtimeTransportStateChange={handleRealtimeTransportStateChange}
+                    onLeave={handleLeaveRoom}
+                  />
+                </CardContent>
+              </Card>
 
-                    <div className="space-y-4">
-                      {/* AI Summary */}
-                      <div className="rounded-xl bg-gradient-to-br from-primary-50 to-primary-100/50 p-4 border border-primary-200/50">
-                        <div className="flex items-center gap-2 mb-2">
-                          <svg className="h-3.5 w-3.5 text-primary-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                          </svg>
-                          <span className="text-xs font-semibold text-primary-700 uppercase tracking-wider">Live Summary</span>
-                        </div>
-                        <p className="text-sm text-primary-800 leading-relaxed">
-                          {meetingData.aiSummary ?? 'AI summary will appear as the meeting progresses.'}
-                        </p>
+              {/* Transcript Card */}
+              <Card>
+                <CardHeader className="border-b border-slate-200 pb-5">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                      <CardTitle className="text-lg">Transcript</CardTitle>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant={
+                            transcriptStatusLabel === 'on'
+                              ? 'success'
+                              : transcriptStatusLabel === 'starting'
+                                ? 'info'
+                                : 'muted'
+                          }
+                        >
+                          {transcriptStatusLabel === 'on'
+                            ? 'on'
+                            : transcriptStatusLabel === 'starting'
+                              ? 'starting'
+                              : 'off'}
+                        </Badge>
+                        {realtimeNotice ? (
+                          <Badge
+                            variant={
+                              realtimeTransportState === 'warning'
+                                ? 'warning'
+                                : realtimeTransportState === 'receiving'
+                                  ? 'success'
+                                  : 'muted'
+                            }
+                          >
+                            {realtimeTransportState === 'warning'
+                              ? 'cảnh báo'
+                              : realtimeTransportState === 'receiving'
+                                ? 'đang nhận'
+                                : realtimeTransportState === 'waiting'
+                                  ? 'đang chờ'
+                                  : 'sẵn sàng'}
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="min-w-[180px]">
+                        <Select
+                          value={sttLanguageInput}
+                          onChange={(event) => setSttLanguageInput(event.target.value)}
+                          options={STT_LANGUAGE_OPTIONS}
+                        />
+                      </div>
+                      <div className="min-w-[200px]">
+                        <Select
+                          value={sttTargetLanguageInput}
+                          onChange={(event) => setSttTargetLanguageInput(event.target.value)}
+                          options={STT_TARGET_LANGUAGE_OPTIONS}
+                        />
+                      </div>
+                      <Button
+                        onClick={() => void handleStartRealtime()}
+                        disabled={startRealtimeDisabled}
+                      >
+                        Bật realtime
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => void handleStopRealtime()}
+                        disabled={
+                          stopSttMutation.isPending ||
+                          !meetingId ||
+                          !['running', 'fallback_asr_only'].includes(sttState?.status ?? '')
+                        }
+                      >
+                        Tắt
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="grid gap-4 xl:grid-cols-[1.12fr_0.88fr]">
+                    {/* Live Transcript */}
+                    <div className="min-h-[680px] rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-indigo-700">Live</p>
+                        <Badge variant={activeRealtimeEntries.length ? 'info' : 'muted'}>
+                          {activeRealtimeEntries.length} live
+                        </Badge>
                       </div>
 
-                      {/* Key Terms */}
-                      {meetingData.keyTerms && meetingData.keyTerms.length > 0 ? (
-                        <div>
-                          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2.5">Key Terms Detected</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {meetingData.keyTerms.map((term: string, i: number) => (
-                              <span key={i} className="inline-flex items-center rounded-lg bg-surface-100 px-2.5 py-1 text-xs font-medium text-surface-600">
-                                {term}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {/* Action Items */}
-                      {meetingData.actionItems && meetingData.actionItems.length > 0 ? (
-                        <div>
-                          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2.5">Action Items</p>
-                          <div className="space-y-2">
-                            {meetingData.actionItems.map((item: string, i: number) => (
-                              <div key={i} className="flex items-start gap-2.5 rounded-lg bg-surface-50 p-3">
-                                <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-surface-300">
+                      {activeRealtimeEntries.length ? (
+                        <div className="space-y-3">
+                          {activeRealtimeEntries.map((entry) => (
+                            <div
+                              key={entry.id}
+                              className="rounded-xl border border-slate-200 bg-white p-3"
+                            >
+                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="muted">{entry.speakerLabel}</Badge>
+                                  <Badge variant="info">{entry.language}</Badge>
                                 </div>
-                                <span className="text-sm text-surface-600 leading-relaxed">{item}</span>
+                                <span>{formatRelativeTime(new Date(entry.updatedAt).toISOString())}</span>
                               </div>
-                            ))}
+                              <p className="text-sm leading-relaxed text-slate-900">{entry.text}</p>
+                              {entry.translatedText && entry.targetLanguage ? (
+                                <div className="mt-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+                                  <p className="text-[11px] uppercase tracking-wider text-indigo-600/80">
+                                    Translation {entry.targetLanguage}
+                                  </p>
+                                  <p className="mt-1 text-sm text-indigo-700">
+                                    {entry.translatedText}
+                                  </p>
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex min-h-[500px] items-center justify-center rounded-xl border border-dashed border-indigo-200 bg-white/60 p-8 text-center">
+                          <div className="max-w-md space-y-2">
+                            <p className="text-base font-medium text-slate-700">Chưa có script realtime</p>
+                            <p className="text-sm leading-relaxed text-slate-400">
+                              Khi STT nhận được lời nói từ cuộc họp, transcript sẽ chạy trực tiếp ở khu vực này.
+                            </p>
                           </div>
                         </div>
-                      ) : null}
+                      )}
                     </div>
-                  </Card>
 
-                  {/* Participants */}
-                  <Card>
-                    <div className="flex items-center justify-between mb-5">
-                      <h3 className="text-sm font-semibold text-surface-900">Participants</h3>
-                      <Badge variant="default">{meetingData.participants?.length ?? 0}</Badge>
+                    {/* Saved Timeline */}
+                    <div className="min-h-[680px] rounded-xl border border-slate-200 bg-white p-4">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-slate-900">Timeline đã lưu</p>
+                        <Badge variant="muted">{transcripts.length} dòng</Badge>
+                      </div>
+
+                      {transcriptsQuery.isLoading ? (
+                        <div className="space-y-3">
+                          <Skeleton className="h-20" />
+                          <Skeleton className="h-20" />
+                        </div>
+                      ) : transcripts.filter((item) => getTranscriptRiskSummary(item.id, riskEvents).count > 0).length ? (
+                        <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
+                          {[...transcripts]
+                            .reverse()
+                            .filter((item) => getTranscriptRiskSummary(item.id, riskEvents).count > 0)
+                            .map((item) => {
+                            const riskSummary = getTranscriptRiskSummary(item.id, riskEvents);
+                            return (
+                              <div
+                                key={item.id}
+                                className="rounded-xl border border-slate-200 bg-white p-3"
+                              >
+                                <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-400">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge variant="muted">{item.speakerLabel}</Badge>
+                                    <Badge variant="info">{item.language}</Badge>
+                                    {riskSummary.count > 0 ? (
+                                      <Badge variant={riskVariant(riskSummary.highestSeverity ?? 'medium')}>
+                                        {riskSummary.count} risk
+                                      </Badge>
+                                    ) : null}
+                                  </div>
+                                  <span>{item.startTime.toFixed(2)}s</span>
+                                </div>
+                                <p className="text-sm leading-relaxed text-slate-700">{item.content}</p>
+                                {item.translations?.length ? (
+                                  <div className="mt-2 space-y-1">
+                                    {item.translations.map((translation) => (
+                                      <div
+                                        key={translation.id}
+                                        className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-xs text-indigo-700"
+                                      >
+                                        <span className="mr-2 text-[10px] uppercase tracking-wider text-indigo-500/70">
+                                          {translation.targetLanguage}
+                                        </span>
+                                        {translation.content}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {riskSummary.labels.length ? (
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    {riskSummary.labels.map((label) => (
+                                      <Badge key={`${item.id}-${label}`} variant="warning">
+                                        {label}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <Alert title="Chưa có transcript">
+                          Transcript realtime sẽ hiển thị ở đây sau khi được lưu từ luồng meeting.
+                        </Alert>
+                      )}
                     </div>
-                    {meetingData.participants?.length ? (
-                      <div className="space-y-2">
-                        {meetingData.participants.map((p: any) => (
-                          <div key={p.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-surface-50 transition-colors">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-primary-700 text-xs font-bold">
-                              {(p.wallet ?? '0x').slice(2, 4).toUpperCase()}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              {/* Risk Feed */}
+              {riskQuery.isLoading || topRiskEvents.length ? (
+                <Card>
+                  <CardHeader className="pb-4">
+                    <CardTitle>Risk feed</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {riskQuery.isLoading ? (
+                      <>
+                        <Skeleton className="h-20" />
+                        <Skeleton className="h-20" />
+                      </>
+                    ) : topRiskEvents.length ? (
+                      topRiskEvents.slice(0, 6).map((event) => {
+                        const linkedTranscript = event.transcriptId
+                          ? transcriptById.get(event.transcriptId)
+                          : null;
+                        const riskMessage = buildRiskFeedMessage(
+                          event,
+                          linkedTranscript?.content ?? null,
+                        );
+
+                        return (
+                          <div
+                            key={event.id}
+                            className="rounded-xl border border-red-200 bg-red-50 p-3"
+                          >
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              <Badge variant={riskVariant(event.severity)}>{event.severity}</Badge>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-surface-800 truncate">{shortAddress(p.wallet, 5, 4)}</p>
-                              <p className="text-xs text-surface-400 capitalize">{p.role}</p>
-                            </div>
-                            <div className={`h-2 w-2 rounded-full ${p.joined ? 'bg-emerald-500' : 'bg-surface-300'}`} />
+                            <p className="text-sm leading-relaxed text-slate-700">{riskMessage}</p>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-surface-400 text-center py-4">No participants yet</p>
-                    )}
-                  </Card>
+                        );
+                      })
+                    ) : null}
+                  </CardContent>
+                </Card>
+              ) : null}
 
-                  {/* Meeting Info */}
-                  <Card>
-                    <h3 className="text-sm font-semibold text-surface-900 mb-4">Meeting Info</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-surface-500">Scheduled</span>
-                        <span className="text-sm font-medium text-surface-700">{formatDateTime(meetingData.scheduledAt)}</span>
-                      </div>
-                      {meetingData.startedAt ? (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-surface-500">Started</span>
-                          <span className="text-sm font-medium text-surface-700">{formatDateTime(meetingData.startedAt)}</span>
-                        </div>
-                      ) : null}
-                      {meetingData.endedAt ? (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-surface-500">Ended</span>
-                          <span className="text-sm font-medium text-surface-700">{formatDateTime(meetingData.endedAt)}</span>
-                        </div>
-                      ) : null}
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-surface-500">Channel</span>
-                        <span className="text-sm font-mono font-medium text-surface-700">{meetingData.agoraChannel ?? '—'}</span>
-                      </div>
+              {/* Invite Card */}
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle>Invite</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Input
+                    value={inviteWallet}
+                    onChange={(event) => setInviteWallet(event.target.value)}
+                    placeholder="Wallet được mời, để trống nếu muốn link mở"
+                  />
+                  <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr_0.7fr]">
+                    <Input
+                      value={inviteRole}
+                      onChange={(event) =>
+                        setInviteRole(
+                          event.target.value as 'buyer' | 'seller' | 'arbiter' | 'guest',
+                        )
+                      }
+                      placeholder="guest"
+                    />
+                    <Input
+                      value={inviteUses}
+                      onChange={(event) => setInviteUses(event.target.value)}
+                      placeholder="Số lần dùng"
+                    />
+                  </div>
+                  <Button
+                    onClick={() =>
+                      inviteMutation.mutate({
+                        walletAddress: inviteWallet || undefined,
+                        role: inviteRole,
+                        maxUses: Number(inviteUses) || 1,
+                        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                      })
+                    }
+                    disabled={inviteMutation.isPending}
+                  >
+                    Tạo invite
+                  </Button>
+
+                  {meeting.invites?.length ? (
+                    <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                      {meeting.invites.slice(0, 3).map((invite) => {
+                        const link = `${
+                          typeof window !== 'undefined' ? window.location.origin : ''
+                        }/meetings/${meeting.id}?invite=${invite.token}`;
+
+                        return (
+                          <div key={invite.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
+                            <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                              <Badge variant="muted">{invite.role}</Badge>
+                              <Badge variant={invite.status === 'Accepted' ? 'success' : 'info'}>
+                                {invite.status}
+                              </Badge>
+                              <span className="text-[11px] text-slate-400">
+                                {invite.usedCount}/{invite.maxUses}
+                              </span>
+                            </div>
+                            <p className="break-all text-[11px] text-slate-500">{link}</p>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </Card>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </AppLayout>
+                  ) : null}
+                </CardContent>
+              </Card>
+
+              {/* Manual Transcript */}
+              {isDemoTranscriptMode ? (
+                <Card className="border-t-2 border-t-amber-300">
+                  <CardHeader className="pb-4">
+                    <CardTitle>Manual transcript</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Input
+                        value={speakerLabel}
+                        onChange={(event) => setSpeakerLabel(event.target.value)}
+                        placeholder="Nhãn người nói"
+                      />
+                      <Input
+                        value={transcriptLanguage}
+                        onChange={(event) => setTranscriptLanguage(event.target.value)}
+                        placeholder="vi"
+                      />
+                    </div>
+                    <Textarea
+                      rows={5}
+                      value={transcriptContent}
+                      onChange={(event) => setTranscriptContent(event.target.value)}
+                      placeholder="Dán transcript vào đây để lưu xuống timeline và kích hoạt kiểm tra rủi ro."
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={() => void submitTranscript()}
+                        disabled={!transcriptContent.trim() || addTranscriptMutation.isPending}
+                      >
+                        Gửi transcript
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => setTranscriptContent('Please release first and continue on telegram.')}
+                      >
+                        Nạp sample risk
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </AppShell>
     </AuthGate>
   );
 }

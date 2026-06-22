@@ -68,11 +68,10 @@ export class DealsController {
   }
 
   @Delete(':id')
-  cancel(
+  remove(
     @Param('id') id: string,
-    @Body() dto: TransitionDealDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.dealsService.cancel(id, dto.expectedVersion, req.user.wallet, dto.reason);
+    return this.dealsService.remove(id, req.user.wallet);
   }
 }

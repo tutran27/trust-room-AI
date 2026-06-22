@@ -16,6 +16,7 @@ import {
   useCreateDispute,
   useCreateEscrow,
   useCreateMeeting,
+  useDeleteDeal,
   useSubmitDelivery,
   useDeal,
   useDetectScam,
@@ -163,6 +164,7 @@ export default function DealDetailPage() {
   const updateDeal = useUpdateDeal(dealId ?? '');
   const createEscrow = useCreateEscrow();
   const createMeeting = useCreateMeeting();
+  const deleteDeal = useDeleteDeal(dealId ?? '');
   const meetingsQuery = useMeetingsByDeal(dealId, Boolean(dealId && address));
   const fundEscrow = useFundEscrow();
   const releaseEscrow = useReleaseEscrow();
@@ -254,6 +256,21 @@ export default function DealDetailPage() {
                 {createMeeting.isPending ? 'Creating...' : 'Create Meeting'}
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-danger-600 border-danger-200 hover:bg-danger-50"
+              onClick={() => {
+                if (window.confirm('Are you sure you want to delete this deal?')) {
+                  deleteDeal.mutate(undefined, {
+                    onSuccess: () => router.push('/deals')
+                  });
+                }
+              }}
+              disabled={deleteDeal.isPending}
+            >
+              {deleteDeal.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
           </div>
         </div>
 
@@ -286,11 +303,11 @@ export default function DealDetailPage() {
                   Deal Overview
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                  <div className="rounded-xl bg-surface-50 border border-surface-100 p-3.5">
+                  <div className="rounded-xl bg-surface-50 border border-surface-200 p-3.5">
                     <p className="text-[11px] font-semibold text-surface-400 uppercase tracking-wider mb-1.5">Buyer</p>
                     <p className="text-sm font-mono font-medium text-surface-800">{shortAddress(deal.buyerWallet, 6, 4)}</p>
                   </div>
-                  <div className="rounded-xl bg-surface-50 border border-surface-100 p-3.5">
+                  <div className="rounded-xl bg-surface-50 border border-surface-200 p-3.5">
                     <p className="text-[11px] font-semibold text-surface-400 uppercase tracking-wider mb-1.5">Seller</p>
                     {deal.sellerWallet ? (
                       <p className="text-sm font-mono font-medium text-surface-800">{shortAddress(deal.sellerWallet, 6, 4)}</p>
@@ -302,7 +319,7 @@ export default function DealDetailPage() {
                     <p className="text-[11px] font-semibold text-primary-500 uppercase tracking-wider mb-1.5">Amount</p>
                     <p className="text-sm font-bold text-primary-700">{formatAmount(deal.amount, deal.token)}</p>
                   </div>
-                  <div className="rounded-xl bg-surface-50 border border-surface-100 p-3.5">
+                  <div className="rounded-xl bg-surface-50 border border-surface-200 p-3.5">
                     <p className="text-[11px] font-semibold text-surface-400 uppercase tracking-wider mb-1.5">Deadline</p>
                     <p className="text-sm font-medium text-surface-700">{formatDateTime(deal.deadline)}</p>
                   </div>
@@ -622,7 +639,7 @@ export default function DealDetailPage() {
                           {live.updates.map((update, index) => (
                             <div
                               key={`${update.timestamp}-${index}`}
-                              className="rounded-xl bg-surface-50 p-3 border border-surface-100"
+                              className="rounded-xl bg-surface-50 p-3 border border-surface-200"
                             >
                               <p className="text-xs font-semibold text-surface-700">{update.kind ?? 'deal_update'}</p>
                               <p className="text-xs text-surface-500 mt-0.5">
@@ -683,7 +700,7 @@ export default function DealDetailPage() {
                 {escrow ? (
                   <div className="space-y-5">
                     {/* Escrow Stepper */}
-                    <div className="rounded-xl bg-surface-50 border border-surface-100 p-4">
+                    <div className="rounded-xl bg-surface-50 border border-surface-200 p-4">
                       <Stepper
                         steps={ESCROW_STEPS}
                         currentStep={escrow.status === 'Refunded' ? -1 : escrowStepIndex(escrow.status)}
@@ -691,7 +708,7 @@ export default function DealDetailPage() {
                     </div>
 
                     {/* Escrow Info */}
-                    <div className="rounded-xl bg-surface-50 border border-surface-100 p-4 space-y-3">
+                    <div className="rounded-xl bg-surface-50 border border-surface-200 p-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <StatusBadge type="escrow" status={escrow.status} />
                         <span className="text-sm font-bold text-surface-900">
@@ -699,14 +716,14 @@ export default function DealDetailPage() {
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="rounded-lg bg-surface-50 border border-surface-100 p-2.5">
+                        <div className="rounded-lg bg-surface-50 border border-surface-200 p-2.5">
                           <p className="text-surface-400 mb-1 font-medium">Buyer</p>
                           <p className="font-mono font-semibold text-surface-700 text-[11px]">{shortAddress(escrow.buyerAddress, 6, 4)}</p>
                           <span className={`mt-1 inline-flex items-center gap-1 text-[11px] font-medium ${escrow.buyerConfirmed ? 'text-emerald-600' : 'text-surface-400'}`}>
                             {escrow.buyerConfirmed ? '✅ Confirmed' : '⏳ Pending'}
                           </span>
                         </div>
-                        <div className="rounded-lg bg-surface-50 border border-surface-100 p-2.5">
+                        <div className="rounded-lg bg-surface-50 border border-surface-200 p-2.5">
                           <p className="text-surface-400 mb-1 font-medium">Seller</p>
                           <p className="font-mono font-semibold text-surface-700 text-[11px]">{shortAddress(escrow.sellerAddress, 6, 4)}</p>
                           <span className={`mt-1 inline-flex items-center gap-1 text-[11px] font-medium ${escrow.sellerConfirmed ? 'text-emerald-600' : 'text-surface-400'}`}>
@@ -752,7 +769,7 @@ export default function DealDetailPage() {
                         </Button>
                       )}
 
-                      {escrow.status === 'Funded' && (
+                      {escrow.status !== 'Created' && (
                         <>
                           {address === escrow.buyerAddress && !escrow.buyerConfirmed && (
                             <Button
@@ -805,6 +822,12 @@ export default function DealDetailPage() {
                               <CheckCircle2 className="h-4 w-4 mr-1.5" />
                               {escrowLoading === 'confirm-terms' ? 'Signing...' : 'Seller: Confirm Terms'}
                             </Button>
+                          )}
+                          {escrow.buyerConfirmed && escrow.sellerConfirmed && !escrow.deliverySubmitted && address === escrow.buyerAddress && (
+                            <div className="rounded-xl bg-brand-50 border border-brand-200 p-4 text-center">
+                              <p className="text-sm font-medium text-brand-800">Both parties confirmed terms</p>
+                              <p className="text-xs text-brand-600 mt-1">Waiting for seller to submit delivery proof.</p>
+                            </div>
                           )}
                           {escrow.buyerConfirmed && escrow.sellerConfirmed && address === escrow.sellerAddress && (
                             <Button
@@ -874,6 +897,7 @@ export default function DealDetailPage() {
                           )}
                         </>
                       )}
+
                     </div>
                   </div>
                 ) : (

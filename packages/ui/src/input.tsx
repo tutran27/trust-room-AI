@@ -17,7 +17,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="flex flex-col gap-1.5">
         {label ? (
-          <label htmlFor={inputId} className="text-sm font-medium text-zinc-300">
+          <label htmlFor={inputId} className="text-sm font-medium text-surface-700">
             {label}
           </label>
         ) : null}
@@ -27,17 +27,17 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           aria-invalid={error ? true : undefined}
           aria-describedby={errorId}
           className={cn(
-            'flex h-10 w-full rounded-xl border bg-white/[0.04] px-3 py-2 text-sm text-zinc-100',
-            'placeholder:text-zinc-500 transition-colors duration-150',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 focus-visible:border-emerald-500/50',
-            'disabled:cursor-not-allowed disabled:opacity-40',
-            error ? 'border-red-500/50 focus-visible:ring-red-400/50' : 'border-white/[0.08] hover:border-white/[0.12]',
+            'flex h-10 w-full rounded-lg border border-surface-300 bg-white px-3 py-2 text-sm text-surface-900',
+            'placeholder:text-surface-400 transition-colors duration-150',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:border-brand-400',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            error ? 'border-red-400 focus-visible:ring-red-400' : 'hover:border-surface-400',
             className,
           )}
           {...props}
         />
         {error ? (
-          <p id={errorId} className="text-xs text-red-400">
+          <p id={errorId} className="text-xs text-danger-600">
             {error}
           </p>
         ) : null}

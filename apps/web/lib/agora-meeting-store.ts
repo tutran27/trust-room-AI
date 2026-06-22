@@ -106,6 +106,22 @@ export async function joinAgoraMeeting(params: {
     await leaveAgoraMeeting();
   }
 
+  // Re-joining the same meeting from idle/error state — clean stale client first
+  if (client && state.meetingId === meetingId) {
+    try {
+      if (joinedChannel) await client.leave();
+    } catch {
+      // ignore cleanup failures
+    }
+    try { localAudioTrack?.stop(); localAudioTrack?.close(); } catch {}
+    try { localVideoTrack?.stop(); localVideoTrack?.close(); } catch {}
+    client = null;
+    localAudioTrack = null;
+    localVideoTrack = null;
+    remoteUsers.clear();
+    joinedChannel = false;
+  }
+
   setState({ meetingId, status: 'connecting', error: null });
   params.onTransportState?.({ status: 'waiting' });
 
