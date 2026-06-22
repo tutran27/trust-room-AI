@@ -64,6 +64,17 @@ export class EscrowService {
     if (escrow.status !== 'Created') {
       throw new BadRequestException(`Cannot fund escrow in status: ${escrow.status}`);
     }
+    if (!escrow.dealIdHash) {
+      throw new BadRequestException('Escrow has no dealIdHash — init may not have completed.');
+    }
+
+    // Check that the PDA exists on-chain before building deposit tx
+    const onChain = await this.solana.getEscrowState(escrow.dealIdHash);
+    if (!onChain) {
+      throw new BadRequestException(
+        'Escrow PDA not found on-chain yet. Please wait a few seconds and try again — the init transaction may still be confirming.',
+      );
+    }
 
     const buyer = new PublicKey(buyerWallet);
     const depositTx = await this.solana.buildDeposit(escrow.dealIdHash!, buyer);

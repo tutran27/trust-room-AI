@@ -18,6 +18,7 @@ import {
 } from '@trustroom/ui';
 import { AppShell } from '../../../components/app-shell';
 import { AuthGate } from '../../../components/auth-gate';
+import { MeetingLobby } from '../../../components/meeting-lobby';
 import { MeetingRtcPanel } from '../../../components/meeting-rtc-panel';
 import {
   useAddMeetingTranscript,
@@ -240,6 +241,8 @@ export default function MeetingDetailPage() {
   const [sttLanguageInput, setSttLanguageInput] = useState('vi-VN');
   const [sttTargetLanguageInput, setSttTargetLanguageInput] = useState('');
   const [realtimeEntries, setRealtimeEntries] = useState<RealtimeEntry[]>([]);
+  const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
+  const [displayName, setDisplayName] = useState('');
   const [realtimeNotice, setRealtimeNotice] = useState('');
   const [realtimeTransportState, setRealtimeTransportState] = useState<
     'idle' | 'waiting' | 'receiving' | 'warning'
@@ -298,6 +301,13 @@ export default function MeetingDetailPage() {
     if (!address) return;
     setSpeakerLabel((current) => current || shortAddress(address, 6, 6));
   }, [address]);
+
+  // When user picks a display name in lobby, use it as speakerLabel
+  useEffect(() => {
+    if (displayName.trim()) {
+      setSpeakerLabel(displayName.trim());
+    }
+  }, [displayName]);
 
   useEffect(() => {
     if (
@@ -467,10 +477,10 @@ export default function MeetingDetailPage() {
   }
 
   function handleRealtimeTransportStateChange(state: {
-    status: 'idle' | 'waiting' | 'receiving' | 'warning';
+    status: string;
     detail?: string;
   }) {
-    setRealtimeTransportState(state.status);
+    setRealtimeTransportState(state.status as 'idle' | 'waiting' | 'receiving' | 'warning');
 
     if (state.status === 'waiting') {
       setRealtimeNotice('Realtime transcript đã được bật. Hệ thống đang chờ câu thoại đầu tiên.');
@@ -573,6 +583,16 @@ export default function MeetingDetailPage() {
           <Alert variant="danger" title="Không tải được meeting">
             {meetingQuery.error instanceof Error ? meetingQuery.error.message : 'Meeting không tồn tại.'}
           </Alert>
+        ) : !hasJoinedRoom ? (
+          <MeetingLobby
+            meetingTitle={meeting.title}
+            displayName={displayName}
+            onDisplayNameChange={setDisplayName}
+            onJoin={() => setHasJoinedRoom(true)}
+            joinDisabled={!displayName.trim()}
+            joinLoading={tokenQuery.isLoading}
+            error={tokenQuery.error instanceof Error ? tokenQuery.error.message : null}
+          />
         ) : (
           <div className="grid gap-6 2xl:grid-cols-[2.2fr_0.8fr]">
             <div className="space-y-6">
