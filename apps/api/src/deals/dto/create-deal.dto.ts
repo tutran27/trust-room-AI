@@ -42,5 +42,9 @@ export class CreateDealDto {
   @IsOptional()
   @IsString()
   @Matches(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, { message: 'Invalid Solana wallet address.' })
-  sellerWallet?: string;
+  counterpartyWallet?: string;
+
+  @IsOptional()
+  @IsString()
+  role?: 'buyer' | 'seller';
 }

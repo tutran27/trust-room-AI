@@ -122,7 +122,7 @@ export class EscrowService {
   /** Build unsigned release tx for buyer to sign. */
   async releaseEscrow(id: string) {
     const escrow = await this.assertEscrow(id);
-    if (escrow.status !== 'Funded') {
+    if (escrow.status !== 'Funded' && escrow.status !== 'DeliverySubmitted') {
       throw new BadRequestException(`Cannot release escrow in status: ${escrow.status}`);
     }
 
@@ -139,7 +139,7 @@ export class EscrowService {
   /** Confirm release on-chain tx. */
   async confirmReleased(id: string, txSignature: string) {
     const escrow = await this.assertEscrow(id);
-    if (escrow.status !== 'Funded') {
+    if (escrow.status !== 'Funded' && escrow.status !== 'DeliverySubmitted') {
       throw new BadRequestException(`Cannot confirm release in status: ${escrow.status}`);
     }
 

@@ -78,6 +78,14 @@ export function useDealRoom(deal: Deal | null | undefined, wallet: string | null
         sender: wallet,
         speakerRole: apiSuggestedRole,
       });
+      // Optimistic update — show message immediately without waiting for backend
+      setMessages((current) => [...current, {
+        dealId: deal.id!,
+        message,
+        sender: wallet!,
+        speakerRole: apiSuggestedRole,
+        timestamp: new Date().toISOString(),
+      }].slice(-100));
     },
   };
 }

@@ -26,6 +26,9 @@ export function useDeals(status?: string, enabled = true) {
     queryFn: () =>
       apiFetch<Paginated<Deal>>(`/deals${status ? `?status=${encodeURIComponent(status)}` : ''}`),
     enabled,
+    retry: 2,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -61,7 +64,8 @@ export interface CreateDealInput {
   amount: string;
   token: string;
   deadline?: string;
-  sellerWallet?: string;
+  counterpartyWallet?: string;
+  role?: 'buyer' | 'seller';
 }
 
 export function useCreateDeal() {

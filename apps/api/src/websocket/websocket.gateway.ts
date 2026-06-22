@@ -79,13 +79,14 @@ export class WebsocketGateway
    */
   @SubscribeMessage('chat_message')
   async handleChatMessage(
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
     @MessageBody() data: ChatMessagePayload,
   ) {
     const room = `deal:${data.dealId}`;
     const timestamp = new Date().toISOString();
 
-    this.server.to(room).emit('chat_message', {
+    // Broadcast to everyone EXCEPT sender (sender already has optimistic update)
+    client.broadcast.to(room).emit('chat_message', {
       dealId: data.dealId,
       message: data.message,
       sender: data.sender,

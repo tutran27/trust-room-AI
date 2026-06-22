@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card } from '@/components/ui/Card';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -155,6 +155,7 @@ export default function DealDetailPage() {
   const dealId = params?.id ?? null;
   const router = useRouter();
   const { address } = useAuth();
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const dealQuery = useDeal(dealId);
   const escrowQuery = useEscrowByDeal(dealId);
   const deal = dealQuery.data ?? null;
@@ -200,6 +201,13 @@ export default function DealDetailPage() {
     live.sendChatMessage(chatMessage);
     setChatMessage('');
   };
+
+  // Auto-scroll chat to bottom on new messages
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollTop = chatEndRef.current.scrollHeight;
+    }
+  }, [live.messages]);
 
   return (
     <AppLayout>
@@ -493,8 +501,19 @@ export default function DealDetailPage() {
                       <p className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2">
                         <MessageSquare className="h-3.5 w-3.5 text-surface-400" />
                         Transcript
+                        {live.connected ? (
+                          <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-success-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-success-500" />
+                            Live
+                          </span>
+                        ) : (
+                          <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-surface-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-surface-300" />
+                            Connecting...
+                          </span>
+                        )}
                       </p>
-                      <div className="max-h-[500px] space-y-3 overflow-y-auto">
+                      <div className="max-h-[600px] space-y-3 overflow-y-auto">
                         {live.messages.length > 0 ? (
                           live.messages.map((message, index) => (
                             <div
@@ -516,14 +535,14 @@ export default function DealDetailPage() {
                             </div>
                           ))
                         ) : (
-                          <div className="flex min-h-[300px] items-center justify-center rounded-xl border border-dashed border-surface-300 p-8 text-center">
+                          <div className="flex min-h-[400px] items-center justify-center rounded-xl border border-dashed border-surface-300 p-8 text-center">
                             <div>
                               <div className="w-12 h-12 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
                                 <MessageSquare className="h-5 w-5 text-surface-400" />
                               </div>
                               <p className="text-sm font-medium text-surface-700">No transcript yet</p>
                               <p className="text-xs text-surface-500 mt-1">
-                                Send a chat message to start the realtime monitor.
+                                Chat messages are sent in real-time. Both parties must be on this page to exchange messages.
                               </p>
                             </div>
                           </div>

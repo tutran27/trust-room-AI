@@ -245,6 +245,7 @@ export default function MeetingDetailPage() {
   );
   const [displayName, setDisplayName] = useState('');
   const [realtimeNotice, setRealtimeNotice] = useState('');
+  const [riskAlert, setRiskAlert] = useState<{ level: string; count: number } | null>(null);
   const [realtimeTransportState, setRealtimeTransportState] = useState<
     'idle' | 'waiting' | 'receiving' | 'warning'
   >('idle');
@@ -377,9 +378,14 @@ export default function MeetingDetailPage() {
       void riskQuery.refetch();
     };
 
-    const handleMeetingRiskEvent = (payload: { meetingId?: string }) => {
+    const handleMeetingRiskEvent = (payload: { meetingId?: string; severity?: string; type?: string; description?: string }) => {
       if (payload.meetingId !== meetingId) {
         return;
+      }
+      const sev = (payload.severity ?? '').toLowerCase();
+      if (sev === 'critical' || sev === 'high') {
+        setRiskAlert((prev) => ({ level: sev, count: (prev?.count ?? 0) + 1 }));
+        setTimeout(() => setRiskAlert(null), 8000);
       }
       void riskQuery.refetch();
     };
@@ -593,8 +599,30 @@ export default function MeetingDetailPage() {
             error={tokenQuery.error instanceof Error ? tokenQuery.error.message : null}
           />
         ) : (
-          <div className="grid gap-6 2xl:grid-cols-[2.2fr_0.8fr]">
+          <div className={`relative transition-all duration-500 ${
+              riskAlert ? 'ring-2 ring-danger-500 ring-offset-2 ring-offset-red-50' : ''
+            }`}>
+            {riskAlert && (
+              <div className="fixed inset-0 z-30 pointer-events-none animate-pulse bg-danger-500/5" />
+            )}
+            <div className="grid gap-6 2xl:grid-cols-[2.2fr_0.8fr]">
             <div className="space-y-6">
+              {/* Risk Alert Banner */}
+              {riskAlert && (
+                <div className="rounded-2xl border-2 border-danger-400 bg-danger-50 p-5 shadow-lg shadow-danger-500/20 animate-fade-in">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-danger-500 animate-pulse" />
+                    <div>
+                      <p className="text-sm font-bold text-danger-800 uppercase tracking-wider">
+                        ⚠ Scam Alert — {riskAlert.count} risk event{riskAlert.count > 1 ? 's' : ''} detected
+                      </p>
+                      <p className="text-xs text-danger-600 mt-0.5">
+                        Unusual behavior detected in conversation. Review terms carefully before releasing funds.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Call Room Card */}
               <Card className="overflow-hidden">
                 <CardHeader className="border-b border-slate-200 pb-5">
@@ -998,6 +1026,7 @@ export default function MeetingDetailPage() {
                 </Card>
               ) : null}
             </div>
+          </div>
           </div>
         )}
       </AppShell>

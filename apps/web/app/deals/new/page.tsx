@@ -29,7 +29,8 @@ type CreateDealForm = {
   amount: string;
   token: 'SOL' | 'USDC' | 'SPL_TOKEN';
   deadline: string;
-  sellerWallet: string;
+  counterpartyWallet: string;
+  role: 'buyer' | 'seller';
 };
 
 const DEAL_TYPE_OPTIONS = [
@@ -80,7 +81,8 @@ export default function CreateDealPage() {
       amount: '100',
       token: 'SOL',
       deadline: '',
-      sellerWallet: '',
+      counterpartyWallet: '',
+      role: 'buyer',
     },
   });
 
@@ -125,7 +127,8 @@ export default function CreateDealPage() {
                         amount: values.amount,
                         token: values.token,
                         deadline: values.deadline || undefined,
-                        sellerWallet: values.sellerWallet || undefined,
+                        counterpartyWallet: values.counterpartyWallet || undefined,
+                        role: values.role,
                       });
                       router.push(`/deals/${created.id}`);
                     } catch (error) {
@@ -174,13 +177,24 @@ export default function CreateDealPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-2">
-                    <Label htmlFor="sellerWallet">Seller wallet</Label>
-                    <Input
-                      id="sellerWallet"
-                      placeholder="Base58 wallet của seller"
-                      {...form.register('sellerWallet')}
-                    />
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="role">Your role</Label>
+                      <Select id="role" options={[
+                        { label: 'Buyer', value: 'buyer' },
+                        { label: 'Seller', value: 'seller' },
+                      ] as any} {...form.register('role')} />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="counterpartyWallet">
+                        {form.watch('role') === 'buyer' ? 'Seller wallet' : 'Buyer wallet'}
+                      </Label>
+                      <Input
+                        id="counterpartyWallet"
+                        placeholder={`Base58 wallet của ${form.watch('role') === 'buyer' ? 'seller' : 'buyer'}`}
+                        {...form.register('counterpartyWallet')}
+                      />
+                    </div>
                   </div>
 
                   {submitError ? (

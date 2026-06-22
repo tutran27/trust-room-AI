@@ -4,16 +4,57 @@ import { Alert, Card, CardContent, CardHeader, CardTitle, Skeleton } from '@trus
 import { useNotifications } from '../hooks/use-api';
 import { formatRelativeTime } from '../lib/format';
 import { useAuth } from '../providers/auth-provider';
+import { useSocket } from '../providers/socket-provider';
 import { StatusBadge } from './status-badge';
+import { useEffect, useState } from 'react';
+import { Bell } from 'lucide-react';
+
+interface RealtimeNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  dealId?: string;
+  createdAt: string;
+}
 
 export function NotificationPanel() {
   const { status } = useAuth();
+  const { socket } = useSocket();
+  const [liveNotifications, setLiveNotifications] = useState<RealtimeNotification[]>([]);
   const notifications = useNotifications(status === 'authenticated');
+  const [newAlert, setNewAlert] = useState(false);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const onNotification = (payload: RealtimeNotification) => {
+      setLiveNotifications((current) => [payload, ...current].slice(0, 10));
+      setNewAlert(true);
+      setTimeout(() => setNewAlert(false), 5000);
+    };
+
+    socket.on('notification', onNotification);
+    return () => { socket.off('notification', onNotification); };
+  }, [socket]);
+
+  const allNotifications = [
+    ...liveNotifications,
+    ...(notifications.data ?? []),
+  ].slice(0, 10);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Thông báo</CardTitle>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CardTitle>Notifications</CardTitle>
+            {newAlert && (
+              <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
+            )}
+          </div>
+          <Bell className="w-4 h-4 text-surface-400" />
+        </div>
       </CardHeader>
       <CardContent className="space-y-2">
         {notifications.isLoading ? (
@@ -21,25 +62,21 @@ export function NotificationPanel() {
             <Skeleton className="h-14 rounded-xl" />
             <Skeleton className="h-14 rounded-xl" />
           </>
-        ) : notifications.isError ? (
-          <Alert variant="danger" title="Không tải được thông báo">
-            {notifications.error instanceof Error ? notifications.error.message : 'Lỗi không xác định.'}
-          </Alert>
-        ) : notifications.data && notifications.data.length > 0 ? (
-          notifications.data.slice(0, 6).map((item) => (
-            <div key={item.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 transition-colors hover:bg-white/[0.04]">
+        ) : allNotifications.length > 0 ? (
+          allNotifications.map((item) => (
+            <div key={item.id} className="rounded-xl border border-surface-200 bg-white p-3 shadow-sm transition-colors hover:bg-surface-50">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-zinc-100">{item.title}</p>
-                  <p className="mt-0.5 text-xs text-zinc-400 line-clamp-2">{item.message}</p>
+                  <p className="text-sm font-medium text-surface-800">{item.title}</p>
+                  <p className="mt-0.5 text-xs text-surface-500 line-clamp-2">{item.message}</p>
                 </div>
-                <StatusBadge value={item.read ? 'Resolved' : 'Open'} />
+                <StatusBadge value={item.createdAt ? 'Open' : 'Resolved'} />
               </div>
-              <p className="mt-2 text-[11px] text-zinc-500">{formatRelativeTime(item.createdAt)}</p>
+              <p className="mt-2 text-[11px] text-surface-400">{formatRelativeTime(item.createdAt)}</p>
             </div>
           ))
         ) : (
-          <Alert title="Chưa có thông báo">Các thay đổi realtime của deal sẽ hiện ở đây.</Alert>
+          <Alert title="No notifications">Real-time deal updates will appear here.</Alert>
         )}
       </CardContent>
     </Card>

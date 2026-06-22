@@ -116,6 +116,21 @@ export class MeetingsService {
       },
     });
 
+    // Notify counterparty in real-time via WebSocket
+    const counterparty = deal.participants.find(
+      (item) => item.walletAddress !== walletAddress,
+    );
+    if (counterparty) {
+      this.ws.emitNotification(counterparty.walletAddress, {
+        id: session.id,
+        type: 'MeetingCreated',
+        title: 'Meeting created',
+        message: `${participant.role === 'buyer' ? 'Buyer' : 'Seller'} created a meeting for "${deal.title}". Click to join.`,
+        dealId: dto.dealId,
+        createdAt: session.createdAt.toISOString(),
+      });
+    }
+
     return this.findById(session.id);
   }
 
@@ -859,9 +874,9 @@ export class MeetingsService {
 
   private buildDemoSttState(fallbackReason: string | null = null): MeetingSttState {
     return {
-      enabled: false,
+      enabled: true,
       mode: 'demo_manual',
-      status: 'idle',
+      status: 'fallback_asr_only',
       agentId: null,
       pusherUid: null,
       languages: [],

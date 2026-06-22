@@ -31,19 +31,22 @@ export class DealsService {
   ) {}
 
   async create(dto: CreateDealDto, actorWallet: string) {
+    const myRole: ParticipantRole = dto.role === 'seller' ? 'seller' : 'buyer';
+    const counterpartyRole: ParticipantRole = myRole === 'buyer' ? 'seller' : 'buyer';
+
     const participants: Array<{ walletAddress: string; role: ParticipantRole }> = [
-      { walletAddress: actorWallet, role: 'buyer' },
+      { walletAddress: actorWallet, role: myRole },
     ];
 
-    if (dto.sellerWallet) {
-      if (dto.sellerWallet === actorWallet) {
+    if (dto.counterpartyWallet) {
+      if (dto.counterpartyWallet === actorWallet) {
         throw new AppException(
           HttpStatus.CONFLICT,
           'PARTICIPANT_CONFLICT',
-          'Seller wallet cannot match the buyer wallet.',
+          'Counterparty wallet cannot match your own wallet.',
         );
       }
-      participants.push({ walletAddress: dto.sellerWallet, role: 'seller' });
+      participants.push({ walletAddress: dto.counterpartyWallet, role: counterpartyRole });
     }
 
     const deal = await this.prisma.deal.create({

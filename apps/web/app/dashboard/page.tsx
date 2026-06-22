@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthGate } from '@/components/auth-gate';
+import { useAuth } from '@/providers/auth-provider';
 import { Card } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -38,13 +39,15 @@ interface DashboardStats {
 
 export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const { status: authStatus } = useAuth();
+  const isAuth = authStatus === 'authenticated';
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
 
-  const { data: dealsRes, isLoading: dealsLoading } = useDeals();
+  const { data: dealsRes, isLoading: dealsLoading } = useDeals(undefined, isAuth);
 
   const deals = dealsRes?.data || [];
   const stats: DashboardStats = {
