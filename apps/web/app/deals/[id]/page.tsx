@@ -3,21 +3,12 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Input,
-  Skeleton,
-  Textarea,
-} from '@trustroom/ui';
-import { AppShell } from '../../../components/app-shell';
-import { AuthGate } from '../../../components/auth-gate';
-import { StatusBadge } from '../../../components/status-badge';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { Card } from '@/components/ui/Card';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Stepper } from '@/components/ui/Stepper';
 import {
   useAddEvidence,
   useConfirmEscrowCreated,
@@ -49,6 +40,25 @@ import {
 } from '../../../lib/format';
 import { shortAddress } from '../../../lib/wallet';
 import { useAuth } from '../../../providers/auth-provider';
+import {
+  ChevronRight,
+  Shield,
+  Users,
+  Clock,
+  AlertTriangle,
+  Video,
+  Send,
+  Scan,
+  MessageSquare,
+  Bot,
+  ExternalLink,
+  Wallet,
+  FileText,
+  AlertCircle,
+  CheckCircle2,
+  ArrowLeft,
+  Zap,
+} from 'lucide-react';
 
 const DEAL_ACTION_OPTIONS: Record<string, string[]> = {
   Draft: ['publish', 'cancel'],
@@ -56,12 +66,19 @@ const DEAL_ACTION_OPTIONS: Record<string, string[]> = {
   WaitingForCounterparty: ['verify-wallets', 'cancel'],
 };
 
-function riskVariant(level?: string) {
+function riskVariant(level?: string): 'danger' | 'warning' | 'info' | 'default' {
   const normalized = String(level ?? '').toLowerCase();
-  if (normalized === 'critical' || normalized === 'high') return 'danger' as const;
-  if (normalized === 'medium') return 'warning' as const;
-  if (normalized === 'low') return 'info' as const;
-  return 'muted' as const;
+  if (normalized === 'critical' || normalized === 'high') return 'danger';
+  if (normalized === 'medium') return 'warning';
+  if (normalized === 'low') return 'info';
+  return 'default';
+}
+
+function riskColor(level?: string) {
+  const normalized = String(level ?? '').toLowerCase();
+  if (normalized === 'critical' || normalized === 'high') return { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', dot: 'bg-red-500', iconBg: 'bg-red-100' };
+  if (normalized === 'medium') return { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', dot: 'bg-amber-500', iconBg: 'bg-amber-100' };
+  return { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', dot: 'bg-emerald-500', iconBg: 'bg-emerald-100' };
 }
 
 function explainRiskIntent(intent?: string) {
@@ -70,46 +87,67 @@ function explainRiskIntent(intent?: string) {
       return {
         title: 'Yêu cầu chuyển qua nền tảng khác',
         explanation:
-          'Giải thích: Có thể đối phương đang cố đưa bạn ra ngoài hệ thống để né escrow, né log hội thoại và tăng rủi ro lừa đảo.',
+          'Có thể đối phương đang cố đưa bạn ra ngoài hệ thống để né escrow, né log hội thoại và tăng rủi ro lừa đảo.',
       };
     case 'early_release_request':
       return {
         title: 'Yêu cầu release sớm',
         explanation:
-          'Giải thích: Đối phương đang thúc bạn giải ngân trước khi hàng hóa, dịch vụ hoặc bằng chứng hoàn tất được xác minh.',
+          'Đối phương đang thúc bạn giải ngân trước khi hàng hóa, dịch vụ hoặc bằng chứng hoàn tất được xác minh.',
       };
     case 'external_wallet':
       return {
         title: 'Yêu cầu gửi sang ví ngoài escrow',
         explanation:
-          'Giải thích: Ví này không nằm trong deal đã xác minh. Nếu chuyển tiền ra ngoài, bạn có thể mất toàn bộ lớp bảo vệ của escrow.',
+          'Ví này không nằm trong deal đã xác minh. Nếu chuyển tiền ra ngoài, bạn có thể mất toàn bộ lớp bảo vệ của escrow.',
       };
     case 'fake_payment_proof':
       return {
         title: 'Bằng chứng thanh toán chưa đáng tin',
         explanation:
-          'Giải thích: Hệ thống phát hiện dấu hiệu dùng ảnh chụp, bill hoặc xác nhận mơ hồ thay cho thanh toán đã được kiểm chứng thật.',
+          'Hệ thống phát hiện dấu hiệu dùng ảnh chụp, bill hoặc xác nhận mơ hồ thay cho thanh toán đã được kiểm chứng thật.',
       };
     case 'credential_request':
       return {
         title: 'Yêu cầu thông tin nhạy cảm',
         explanation:
-          'Giải thích: Không ai hợp lệ được phép xin seed phrase, private key, OTP hoặc quyền truy cập ví của bạn.',
+          'Không ai hợp lệ được phép xin seed phrase, private key, OTP hoặc quyền truy cập ví của bạn.',
       };
     case 'time_pressure':
       return {
         title: 'Đang tạo áp lực thời gian',
         explanation:
-          'Giải thích: Việc hối thúc quá nhanh thường nhằm khiến bạn bỏ qua bước xác minh quan trọng trước khi giao dịch.',
+          'Việc hối thúc quá nhanh thường nhằm khiến bạn bỏ qua bước xác minh quan trọng trước khi giao dịch.',
       };
     default:
       return {
         title: 'Phát hiện tín hiệu rủi ro',
         explanation:
-          'Giải thích: Nội dung hội thoại có dấu hiệu bất thường, bạn nên kiểm tra kỹ điều khoản và bằng chứng trước khi tiếp tục.',
+          'Nội dung hội thoại có dấu hiệu bất thường, bạn nên kiểm tra kỹ điều khoản và bằng chứng trước khi tiếp tục.',
       };
   }
 }
+
+/** Map escrow status to stepper index */
+function escrowStepIndex(status?: string): number {
+  switch (status) {
+    case 'Created': return 0;
+    case 'Funded': return 1;
+    case 'TermsConfirmed': return 2;
+    case 'DeliverySubmitted': return 3;
+    case 'Released': return 4;
+    case 'Refunded': return 4;
+    default: return 0;
+  }
+}
+
+const ESCROW_STEPS = [
+  { label: 'Created', description: 'Escrow deployed' },
+  { label: 'Funded', description: 'SOL deposited' },
+  { label: 'Terms', description: 'Both agree' },
+  { label: 'Delivery', description: 'Seller submits' },
+  { label: 'Released', description: 'Funds released' },
+];
 
 export default function DealDetailPage() {
   const params = useParams<{ id: string }>();
@@ -162,609 +200,754 @@ export default function DealDetailPage() {
   };
 
   return (
-    <AuthGate>
-      <AppShell
-        title={deal?.title ?? 'Deal room'}
-        contentClassName="max-w-[1920px] px-3 md:px-5 2xl:px-8"
-        actions={
-          <>
-            <Link href="/dashboard">
-              <Button variant="ghost">Dashboard</Button>
-            </Link>
+    <AppLayout>
+      <div className="max-w-[1400px] mx-auto space-y-6">
+        {/* Breadcrumbs */}
+        <nav className="flex items-center gap-1.5 text-sm">
+          <Link href="/deals" className="text-surface-400 hover:text-primary-600 transition-colors flex items-center gap-1">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Deals
+          </Link>
+          <ChevronRight className="h-3.5 w-3.5 text-surface-300" />
+          <span className="text-surface-700 font-medium truncate max-w-[200px]">{deal?.title ?? 'Loading...'}</span>
+        </nav>
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-surface-900 tracking-tight">{deal?.title ?? 'Deal Room'}</h1>
+              {deal && <StatusBadge type="deal" status={deal.status} />}
+            </div>
+            <p className="mt-1.5 text-sm text-surface-500">
+              {deal ? `Created ${formatDateTime(deal.createdAt)} · v${deal.version}` : 'Loading...'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
             <Link href="/disputes">
-              <Button variant="secondary">Xem disputes</Button>
+              <Button variant="outline" size="sm">
+                <AlertTriangle className="h-4 w-4 mr-1.5" />
+                Disputes
+              </Button>
             </Link>
             {meetingsQuery.data?.[0] ? (
               <Link href={`/meetings/${meetingsQuery.data[0].id}`}>
-                <Button>Vào meeting</Button>
+                <Button variant="primary" size="sm">
+                  <Video className="h-4 w-4 mr-1.5" />
+                  Join Meeting
+                </Button>
               </Link>
-            ) : null}
-          </>
-        }
-      >
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={async () => {
+                  const meeting = await createMeeting.mutateAsync({
+                    dealId: deal!.id,
+                    title: `${deal!.title} - Meeting`,
+                  });
+                  router.push(`/meetings/${meeting.id}`);
+                }}
+                disabled={createMeeting.isPending}
+              >
+                <Video className="h-4 w-4 mr-1.5" />
+                {createMeeting.isPending ? 'Creating...' : 'Create Meeting'}
+              </Button>
+            )}
+          </div>
+        </div>
+
         {dealQuery.isLoading ? (
-          <div className="grid gap-6">
-            <Skeleton className="h-[820px]" />
+          <div className="grid gap-6 lg:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-64 rounded-2xl bg-surface-100 animate-pulse" />
+            ))}
           </div>
         ) : dealQuery.isError || !deal ? (
-          <Alert variant="danger" title="Không tải được deal">
-            {dealQuery.error instanceof Error ? dealQuery.error.message : 'Deal không tồn tại.'}
-          </Alert>
+          <Card padding="lg">
+            <div className="text-center py-12">
+              <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="h-7 w-7 text-red-500" />
+              </div>
+              <p className="text-red-600 font-semibold">Failed to load deal</p>
+              <p className="text-sm text-surface-500 mt-1.5">
+                {dealQuery.error instanceof Error ? dealQuery.error.message : 'Deal does not exist.'}
+              </p>
+            </div>
+          </Card>
         ) : (
-          <div className="grid gap-5 2xl:grid-cols-[1.96fr_0.64fr]">
-            <div className="space-y-6 2xl:contents">
-              {/* Deal Overview Card */}
-              <Card className="overflow-hidden 2xl:order-2 2xl:col-start-2">
-                <CardHeader className="border-b border-white/[0.06] pb-5">
-                  <div className="flex flex-col gap-4">
-                    <div className="space-y-3">
-                      <div className="hidden flex-wrap items-center gap-2">
-                        {meetingsQuery.data?.[0] ? (
-                          <Link href={`/meetings/${meetingsQuery.data[0].id}`}>
-                            <Button>Vào meeting</Button>
-                          </Link>
-                        ) : (
-                          <Button
-                            onClick={async () => {
-                              const meeting = await createMeeting.mutateAsync({
-                                dealId: deal.id,
-                                title: `${deal.title} - Meeting`,
-                              });
-                              router.push(`/meetings/${meeting.id}`);
-                            }}
-                            disabled={createMeeting.isPending}
-                          >
-                            {createMeeting.isPending ? 'Đang tạo room...' : 'Tạo meeting'}
-                          </Button>
-                        )}
-                      </div>
-                      <div>
-                        <CardTitle className="text-lg">Deal overview</CardTitle>
-                      </div>
-                    </div>
-                    <div className="grid gap-1.5 text-sm text-zinc-400">
-                      <p>Buyer: <span className="font-mono text-zinc-300">{shortAddress(deal.buyerWallet, 5, 5)}</span></p>
-                      <p>
-                        Seller:{' '}
-                        {deal.sellerWallet ? <span className="font-mono text-zinc-300">{shortAddress(deal.sellerWallet, 5, 5)}</span> : <span className="text-zinc-500">chưa gán</span>}
-                      </p>
-                      <p>Created: {formatDateTime(deal.createdAt)}</p>
-                      <p>Updated: {formatRelativeTime(deal.updatedAt)}</p>
-                    </div>
+          <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+            {/* Left Column: Main Content */}
+            <div className="space-y-6">
+              {/* Deal Overview */}
+              <Card padding="lg">
+                <h2 className="text-base font-semibold text-surface-900 mb-5 flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary-500" />
+                  Deal Overview
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                  <div className="rounded-xl bg-surface-50 border border-surface-100 p-3.5">
+                    <p className="text-[11px] font-semibold text-surface-400 uppercase tracking-wider mb-1.5">Buyer</p>
+                    <p className="text-sm font-mono font-medium text-surface-800">{shortAddress(deal.buyerWallet, 6, 4)}</p>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-6">
-                  <div className="space-y-4">
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">Mô tả deal</p>
-                      <p className="text-sm leading-relaxed text-zinc-300">
-                        {deal.description || 'Chưa có mô tả.'}
-                      </p>
-                    </div>
+                  <div className="rounded-xl bg-surface-50 border border-surface-100 p-3.5">
+                    <p className="text-[11px] font-semibold text-surface-400 uppercase tracking-wider mb-1.5">Seller</p>
+                    {deal.sellerWallet ? (
+                      <p className="text-sm font-mono font-medium text-surface-800">{shortAddress(deal.sellerWallet, 6, 4)}</p>
+                    ) : (
+                      <p className="text-sm text-surface-400 italic">Not assigned</p>
+                    )}
+                  </div>
+                  <div className="rounded-xl bg-primary-50 border border-primary-100 p-3.5">
+                    <p className="text-[11px] font-semibold text-primary-500 uppercase tracking-wider mb-1.5">Amount</p>
+                    <p className="text-sm font-bold text-primary-700">{formatAmount(deal.amount, deal.token)}</p>
+                  </div>
+                  <div className="rounded-xl bg-surface-50 border border-surface-100 p-3.5">
+                    <p className="text-[11px] font-semibold text-surface-400 uppercase tracking-wider mb-1.5">Deadline</p>
+                    <p className="text-sm font-medium text-surface-700">{formatDateTime(deal.deadline)}</p>
+                  </div>
+                </div>
 
-                    <Textarea
-                      rows={4}
-                      value={editDescription || deal.description || ''}
-                      onChange={(event) => setEditDescription(event.target.value)}
-                      placeholder="Cập nhật mô tả deal"
-                    />
+                {/* Description */}
+                <div className="mb-5">
+                  <p className="text-[11px] font-semibold text-surface-400 uppercase tracking-wider mb-2">Description</p>
+                  <p className="text-sm text-surface-600 leading-relaxed">
+                    {deal.description || 'No description provided.'}
+                  </p>
+                </div>
 
-                    <div className="flex flex-wrap gap-2">
+                {/* Edit Description */}
+                <div className="space-y-3">
+                  <textarea
+                    rows={3}
+                    value={editDescription || deal.description || ''}
+                    onChange={(event) => setEditDescription(event.target.value)}
+                    placeholder="Update deal description..."
+                    className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-300 transition-all resize-none"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() =>
+                        updateDeal.mutate({
+                          expectedVersion: deal.version,
+                          description: editDescription,
+                        })
+                      }
+                      disabled={updateDeal.isPending}
+                    >
+                      Save Description
+                    </Button>
+                    {availableActions.map((action) => (
                       <Button
-                        variant="secondary"
+                        key={action}
+                        variant="outline"
+                        size="sm"
                         onClick={() =>
-                          updateDeal.mutate({
+                          transitionDeal.mutate({
+                            action,
                             expectedVersion: deal.version,
-                            description: editDescription,
                           })
                         }
-                        disabled={updateDeal.isPending}
+                        disabled={transitionDeal.isPending}
                       >
-                        Lưu mô tả
+                        {titleCaseStatus(action)}
                       </Button>
-
-                      {availableActions.map((action) => (
-                        <Button
-                          key={action}
-                          variant="ghost"
-                          onClick={() =>
-                            transitionDeal.mutate({
-                              action,
-                              expectedVersion: deal.version,
-                            })
-                          }
-                          disabled={transitionDeal.isPending}
-                        >
-                          {titleCaseStatus(action)}
-                        </Button>
-                      ))}
-                    </div>
-
-                    {(transitionDeal.error || updateDeal.error) ? (
-                      <Alert variant="danger" title="Không thể cập nhật deal">
+                    ))}
+                  </div>
+                  {(transitionDeal.error || updateDeal.error) ? (
+                    <div className="rounded-xl bg-red-50 border border-red-200 p-3 flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                      <p className="text-sm text-red-700">
                         {(transitionDeal.error instanceof Error && transitionDeal.error.message) ||
                           (updateDeal.error instanceof Error && updateDeal.error.message) ||
-                          'Lỗi không xác định.'}
-                      </Alert>
-                    ) : null}
-                  </div>
+                          'An error occurred.'}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
 
-                  {!deal.sellerWallet ? (
-                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
-                      <p className="mb-3 text-sm font-medium text-amber-400">Mời seller</p>
-                      <div className="flex flex-col gap-3">
-                        <Input
-                          value={sellerWallet}
-                          onChange={(event) => setSellerWallet(event.target.value)}
-                          placeholder="Nhập wallet seller"
-                        />
-                        <Button
-                          onClick={() =>
-                            inviteSeller.mutate({
-                              sellerWallet,
-                              expectedVersion: deal.version,
-                            })
-                          }
-                          disabled={inviteSeller.isPending || !sellerWallet}
-                        >
-                          Mời seller
-                        </Button>
-                      </div>
+                {/* Invite Seller */}
+                {!deal.sellerWallet ? (
+                  <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Users className="h-4 w-4 text-amber-600" />
+                      <p className="text-sm font-semibold text-amber-800">Invite Seller</p>
                     </div>
-                  ) : (
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                      <p className="text-sm font-medium text-zinc-100">Đối tác sẵn sàng</p>
-                      <p className="mt-2 text-sm text-zinc-400">
-                        Seller hiện tại là <span className="font-mono text-zinc-300">{shortAddress(deal.sellerWallet, 5, 5)}</span>.
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        v{deal.version} • deadline {formatDateTime(deal.deadline)}
-                      </p>
+                    <div className="flex gap-3">
+                      <input
+                        value={sellerWallet}
+                        onChange={(event) => setSellerWallet(event.target.value)}
+                        placeholder="Enter seller wallet address"
+                        className="flex-1 rounded-xl border border-amber-200 bg-surface-50 px-4 py-2.5 text-sm text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-300 transition-all"
+                      />
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() =>
+                          inviteSeller.mutate({
+                            sellerWallet,
+                            expectedVersion: deal.version,
+                          })
+                        }
+                        disabled={inviteSeller.isPending || !sellerWallet}
+                      >
+                        Invite
+                      </Button>
                     </div>
-                  )}
-                </CardContent>
+                  </div>
+                ) : (
+                  <div className="mt-5 rounded-xl bg-emerald-50/50 border border-emerald-200 p-4">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <p className="text-sm font-semibold text-emerald-800">Counterparty Ready</p>
+                    </div>
+                    <p className="text-sm text-emerald-700 mt-1 font-mono">
+                      {shortAddress(deal.sellerWallet, 6, 4)}
+                    </p>
+                  </div>
+                )}
               </Card>
 
-              {/* Realtime + Scam Guard Card */}
-              <Card className="2xl:order-1 2xl:col-start-1">
-                <CardHeader className="border-b border-white/[0.06] pb-5">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                    <div>
-                      <CardTitle className="text-lg">Deal room realtime + Scam Guard</CardTitle>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={chatRiskSummary ? riskVariant(chatRiskSummary.level) : 'muted'}>
-                        {chatRiskSummary ? `risk ${chatRiskSummary.level}` : 'no active alert'}
-                      </Badge>
-                      <Badge variant="muted">{live.messages.length} messages</Badge>
-                      <Badge variant="muted">{live.updates.length} updates</Badge>
+              {/* Realtime Transcript + Scam Guard */}
+              <Card padding="lg">
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-base font-semibold text-surface-900 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-primary-500" />
+                      Deal Room & Scam Guard
+                    </h2>
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                      live.connected
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-surface-100 text-surface-500 border border-surface-200'
+                    }`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${live.connected ? 'bg-emerald-500 animate-pulse' : 'bg-surface-400'}`} />
+                      {live.connected ? 'Live' : 'Offline'}
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-6">
-                  {detectScam.data ? (
-                    <Alert
-                      variant={
+                  <div className="flex items-center gap-2">
+                    <Badge variant={chatRiskSummary ? riskVariant(chatRiskSummary.level) : 'default'}>
+                      {chatRiskSummary ? `Risk: ${chatRiskSummary.level}` : 'No active alert'}
+                    </Badge>
+                    <Badge variant="default">{live.messages.length} msgs</Badge>
+                  </div>
+                </div>
+
+                {detectScam.data ? (
+                  <div className={`rounded-xl p-4 mb-5 border ${
+                    detectScam.data.level === 'critical' || detectScam.data.level === 'high'
+                      ? 'bg-red-50 border-red-200'
+                      : detectScam.data.level === 'medium'
+                        ? 'bg-amber-50 border-amber-200'
+                        : 'bg-emerald-50 border-emerald-200'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <Scan className={`h-4 w-4 ${
                         detectScam.data.level === 'critical' || detectScam.data.level === 'high'
-                          ? 'danger'
+                          ? 'text-red-600'
                           : detectScam.data.level === 'medium'
-                            ? 'warning'
-                            : 'success'
-                      }
-                      title={`Scam scan: ${detectScam.data.level}`}
-                    >
+                            ? 'text-amber-600'
+                            : 'text-emerald-600'
+                      }`} />
+                      <p className={`text-sm font-semibold ${
+                        detectScam.data.level === 'critical' || detectScam.data.level === 'high'
+                          ? 'text-red-800'
+                          : detectScam.data.level === 'medium'
+                            ? 'text-amber-800'
+                            : 'text-emerald-800'
+                      }`}>
+                        Scam Scan: {detectScam.data.level}
+                      </p>
+                    </div>
+                    <p className="text-sm text-surface-600 mt-1.5 ml-6">
                       {detectScam.data.hits.length > 0
                         ? detectScam.data.hits.map((hit) => hit.rule.message).join(' | ')
-                        : 'Không có hit đáng chú ý.'}
-                    </Alert>
-                  ) : null}
+                        : 'No notable hits.'}
+                    </p>
+                  </div>
+                ) : null}
 
-                  <div className="grid gap-4 xl:grid-cols-[1.52fr_0.48fr]">
-                    <div className="space-y-4">
-                      {/* Transcript */}
-                      <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.03] p-4">
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-emerald-400">Transcript</p>
-                          <Badge variant={live.connected ? 'success' : 'warning'}>
-                            {live.connected ? 'live' : 'offline'}
-                          </Badge>
-                        </div>
-
-                        <div className="max-h-[700px] space-y-3 overflow-y-auto pr-1">
-                          {live.messages.length > 0 ? (
-                            live.messages.map((message, index) => (
-                              <div
-                                key={`${message.timestamp}-${index}`}
-                                className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
-                              >
-                                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Badge variant="muted">{shortAddress(message.sender, 5, 5)}</Badge>
-                                    <Badge variant="info">{message.speakerRole}</Badge>
-                                  </div>
-                                  <span>{formatRelativeTime(message.timestamp)}</span>
+                <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
+                  {/* Transcript Column */}
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-surface-200 bg-surface-50/50 p-4">
+                      <p className="text-sm font-semibold text-surface-700 mb-3 flex items-center gap-2">
+                        <MessageSquare className="h-3.5 w-3.5 text-surface-400" />
+                        Transcript
+                      </p>
+                      <div className="max-h-[500px] space-y-3 overflow-y-auto">
+                        {live.messages.length > 0 ? (
+                          live.messages.map((message, index) => (
+                            <div
+                              key={`${message.timestamp}-${index}`}
+                              className="rounded-xl border border-surface-200 bg-surface-50 p-3.5"
+                            >
+                              <div className="flex items-center justify-between mb-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono font-semibold text-surface-700">
+                                    {shortAddress(message.sender, 5, 3)}
+                                  </span>
+                                  <Badge variant="info">{message.speakerRole}</Badge>
                                 </div>
-                                <p className="text-sm leading-relaxed text-zinc-100">{message.message}</p>
+                                <span className="text-[11px] text-surface-400">
+                                  {formatRelativeTime(message.timestamp)}
+                                </span>
                               </div>
-                            ))
-                          ) : (
-                            <div className="flex min-h-[560px] items-center justify-center rounded-xl border border-dashed border-emerald-500/15 bg-white/[0.01] p-8 text-center">
-                              <div className="space-y-2">
-                                <p className="text-base font-medium text-zinc-200">Chưa có transcript realtime</p>
-                                <p className="text-sm leading-relaxed text-zinc-500">
-                                  Gửi một chat message để khởi động realtime monitor và feed dữ liệu cho Scam Guard.
-                                </p>
-                              </div>
+                              <p className="text-sm text-surface-800 leading-relaxed">{message.message}</p>
                             </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Chat Input */}
-                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                        <div className="grid gap-3 xl:grid-cols-[1fr_auto]">
-                          <Textarea
-                            rows={3}
-                            value={chatMessage}
-                            onChange={(event) => setChatMessage(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' && !event.shiftKey) {
-                                event.preventDefault();
-                                sendCurrentChatMessage();
-                              }
-                            }}
-                            placeholder="Nhập nội dung thương lượng..."
-                          />
-                          <div className="flex flex-col gap-2 xl:w-[124px]">
-                            <Button
-                              className="h-10 px-3 text-sm"
-                              onClick={sendCurrentChatMessage}
-                              disabled={!chatMessage.trim()}
-                            >
-                              Gửi nhanh
-                            </Button>
-                            <Button
-                              className="h-10 px-3 text-sm"
-                              variant="secondary"
-                              onClick={() => detectScam.mutate({ text: chatMessage })}
-                              disabled={!chatMessage.trim() || detectScam.isPending}
-                            >
-                              Scan nhanh
-                            </Button>
+                          ))
+                        ) : (
+                          <div className="flex min-h-[300px] items-center justify-center rounded-xl border border-dashed border-surface-300 p-8 text-center">
+                            <div>
+                              <div className="w-12 h-12 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
+                                <MessageSquare className="h-5 w-5 text-surface-400" />
+                              </div>
+                              <p className="text-sm font-medium text-surface-700">No transcript yet</p>
+                              <p className="text-xs text-surface-500 mt-1">
+                                Send a chat message to start the realtime monitor.
+                              </p>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      {/* AI Monitor */}
-                      <div className="rounded-2xl border border-red-500/15 bg-red-500/[0.04] p-3.5">
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-zinc-100">AI monitor</p>
-                          <Badge variant={chatRiskSummary ? riskVariant(chatRiskSummary.level) : 'muted'}>
-                            {chatRiskSummary?.level ?? 'idle'}
-                          </Badge>
+                    {/* Chat Input */}
+                    <div className="rounded-xl border border-surface-200 bg-surface-50 p-4">
+                      <div className="flex gap-3">
+                        <textarea
+                          rows={2}
+                          value={chatMessage}
+                          onChange={(event) => setChatMessage(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                              event.preventDefault();
+                              sendCurrentChatMessage();
+                            }
+                          }}
+                          placeholder="Type your negotiation message..."
+                          className="flex-1 rounded-xl border border-surface-200 bg-surface-50 px-4 py-2.5 text-sm text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-300 resize-none transition-all"
+                        />
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            size="sm"
+                            onClick={sendCurrentChatMessage}
+                            disabled={!chatMessage.trim()}
+                          >
+                            <Send className="h-3.5 w-3.5 mr-1" />
+                            Send
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => detectScam.mutate({ text: chatMessage })}
+                            disabled={!chatMessage.trim() || detectScam.isPending}
+                          >
+                            <Scan className="h-3.5 w-3.5 mr-1" />
+                            Scan
+                          </Button>
                         </div>
-
-                        {liveRiskFeed.length ? (
-                          <div className="space-y-2">
-                            {liveRiskFeed.map((riskEvent, index) => (
-                              <div
-                                key={`${riskEvent.timestamp}-${index}`}
-                                className="rounded-xl border border-red-500/10 bg-red-500/[0.03] p-3"
-                              >
-                                <div className="mb-2 flex items-center justify-between gap-3">
-                                  <Badge variant={riskVariant(riskEvent.level)}>{riskEvent.level}</Badge>
-                                  <span className="text-[11px] text-zinc-500">
-                                    {formatRelativeTime(riskEvent.timestamp)}
-                                  </span>
-                                </div>
-                                <p className="text-sm font-semibold leading-relaxed text-zinc-100">
-                                  {explainRiskIntent(riskEvent.intents[0]).title}
-                                </p>
-                                <p className="mt-1 text-sm leading-relaxed text-zinc-300">
-                                  {explainRiskIntent(riskEvent.intents[0]).explanation}
-                                </p>
-                                <p className="hidden text-sm leading-relaxed text-zinc-200">
-                                  {riskEvent.reasons[0] ?? 'Phát hiện tín hiệu đáng ngờ trong hội thoại.'}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <Alert title="Chưa có cảnh báo">
-                            Realtime Scam Guard sẽ đẩy event vào đây khi có tín hiệu đáng ngờ.
-                          </Alert>
-                        )}
-                      </div>
-
-                      {/* Realtime Updates */}
-                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-zinc-100">Realtime updates</p>
-                          <Badge variant="muted">{live.updates.length}</Badge>
-                        </div>
-                        {live.updates.length > 0 ? (
-                          <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
-                            {live.updates.map((update, index) => (
-                              <div
-                                key={`${update.timestamp}-${index}`}
-                                className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3 text-sm text-zinc-400"
-                              >
-                                <p className="font-medium text-zinc-200">{update.kind ?? 'deal_update'}</p>
-                                <p>
-                                  {update.from
-                                    ? `${update.from} -> ${update.to}`
-                                    : update.status ?? 'No status payload'}
-                                </p>
-                                <p className="mt-1 text-[11px] text-zinc-500">
-                                  {formatRelativeTime(update.timestamp)}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-zinc-500">Chưa có cập nhật realtime.</p>
-                        )}
                       </div>
                     </div>
                   </div>
-                </CardContent>
+
+                  {/* AI Monitor Column */}
+                  <div className="space-y-4">
+                    <div className={`rounded-xl border p-4 ${
+                      chatRiskSummary
+                        ? `${riskColor(chatRiskSummary.level).bg} ${riskColor(chatRiskSummary.level).border}`
+                        : 'border-surface-200 bg-surface-50/50'
+                    }`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                            chatRiskSummary ? riskColor(chatRiskSummary.level).iconBg : 'bg-surface-100'
+                          }`}>
+                            <Bot className={`h-4 w-4 ${chatRiskSummary ? riskColor(chatRiskSummary.level).text : 'text-surface-500'}`} />
+                          </div>
+                          <p className="text-sm font-semibold text-surface-700">AI Monitor</p>
+                        </div>
+                        <Badge variant={chatRiskSummary ? riskVariant(chatRiskSummary.level) : 'default'}>
+                          {chatRiskSummary?.level ?? 'Idle'}
+                        </Badge>
+                      </div>
+                      {liveRiskFeed.length ? (
+                        <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                          {liveRiskFeed.map((riskEvent, index) => (
+                            <div
+                              key={`${riskEvent.timestamp}-${index}`}
+                              className="rounded-xl border border-red-200 bg-surface-50 p-3.5"
+                            >
+                              <div className="flex items-center justify-between mb-1.5">
+                                <Badge variant={riskVariant(riskEvent.level)}>{riskEvent.level}</Badge>
+                                <span className="text-[11px] text-surface-400">
+                                  {formatRelativeTime(riskEvent.timestamp)}
+                                </span>
+                              </div>
+                              <p className="text-sm font-semibold text-surface-800">
+                                {explainRiskIntent(riskEvent.intents[0]).title}
+                              </p>
+                              <p className="text-xs text-surface-600 mt-1 leading-relaxed">
+                                {explainRiskIntent(riskEvent.intents[0]).explanation}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6">
+                          <div className="w-10 h-10 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-2.5">
+                            <Shield className="h-5 w-5 text-surface-400" />
+                          </div>
+                          <p className="text-sm font-medium text-surface-600">No alerts yet</p>
+                          <p className="text-xs text-surface-400 mt-0.5">
+                            Realtime Scam Guard will push events here.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Realtime Updates */}
+                    <div className="rounded-xl border border-surface-200 bg-surface-50 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm font-semibold text-surface-700 flex items-center gap-2">
+                          <Zap className="h-3.5 w-3.5 text-surface-400" />
+                          Realtime Updates
+                        </p>
+                      <Badge variant="default">{live.updates.length}</Badge>
+                      </div>
+                      {live.updates.length > 0 ? (
+                        <div className="max-h-[250px] space-y-2 overflow-y-auto">
+                          {live.updates.map((update, index) => (
+                            <div
+                              key={`${update.timestamp}-${index}`}
+                              className="rounded-xl bg-surface-50 p-3 border border-surface-100"
+                            >
+                              <p className="text-xs font-semibold text-surface-700">{update.kind ?? 'deal_update'}</p>
+                              <p className="text-xs text-surface-500 mt-0.5">
+                                {update.from
+                                  ? `${update.from} → ${update.to}`
+                                  : update.status ?? 'No status payload'}
+                              </p>
+                              <p className="text-[10px] text-surface-400 mt-1">
+                                {formatRelativeTime(update.timestamp)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-surface-400 text-center py-4">No updates yet</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </Card>
             </div>
 
-            <div className="space-y-6 2xl:contents">
-              {/* Escrow Card */}
-              <Card className="2xl:order-3 2xl:col-start-2">
-                <CardHeader className="pb-4">
-                  <CardTitle>Escrow (Solana Devnet)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {escrowError ? (
-                    <Alert variant="danger" title="Lỗi escrow">{escrowError}</Alert>
-                  ) : null}
+            {/* Right Column: Sidebar */}
+            <div className="space-y-6">
+              {/* Escrow Card with Stepper */}
+              <Card padding="lg">
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center">
+                      <Wallet className="h-4.5 w-4.5 text-primary-600" />
+                    </div>
+                    <h2 className="text-base font-semibold text-surface-900">Escrow</h2>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    <span className="text-[11px] font-semibold text-blue-700">Solana Devnet</span>
+                  </div>
+                </div>
 
-                  {!isPhantomInstalled() ? (
-                    <Alert variant="warning" title="Cần cài Phantom wallet">
-                      <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer" className="underline">
-                        Cài Phantom
+                {escrowError && (
+                  <div className="rounded-xl bg-red-50 border border-red-200 p-3 mb-4 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                    <p className="text-sm text-red-700">{escrowError}</p>
+                  </div>
+                )}
+
+                {!isPhantomInstalled() && (
+                  <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 mb-4">
+                    <p className="text-sm text-amber-800">
+                      <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer" className="underline font-semibold">
+                        Install Phantom
                       </a>{' '}
-                      để ký giao dịch Solana thật.
-                    </Alert>
-                  ) : null}
+                      to sign Solana transactions.
+                    </p>
+                  </div>
+                )}
 
-                  {escrow ? (
-                    <>
+                {escrow ? (
+                  <div className="space-y-5">
+                    {/* Escrow Stepper */}
+                    <div className="rounded-xl bg-surface-50 border border-surface-100 p-4">
+                      <Stepper
+                        steps={ESCROW_STEPS}
+                        currentStep={escrow.status === 'Refunded' ? -1 : escrowStepIndex(escrow.status)}
+                      />
+                    </div>
+
+                    {/* Escrow Info */}
+                    <div className="rounded-xl bg-surface-50 border border-surface-100 p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <StatusBadge value={escrow.status} />
-                        <span className="text-sm font-medium text-zinc-200">
+                        <StatusBadge type="escrow" status={escrow.status} />
+                        <span className="text-sm font-bold text-surface-900">
                           {formatAmount(escrow.amount, deal.token)}
                         </span>
                       </div>
-                      <div className="space-y-1 text-xs text-zinc-400">
-                        <p>Buyer: <span className="font-mono">{shortAddress(escrow.buyerAddress, 6, 6)}</span> {escrow.buyerConfirmed ? '✅' : '⏳'}</p>
-                        <p>Seller: <span className="font-mono">{shortAddress(escrow.sellerAddress, 6, 6)}</span> {escrow.sellerConfirmed ? '✅' : '⏳'}</p>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="rounded-lg bg-surface-50 border border-surface-100 p-2.5">
+                          <p className="text-surface-400 mb-1 font-medium">Buyer</p>
+                          <p className="font-mono font-semibold text-surface-700 text-[11px]">{shortAddress(escrow.buyerAddress, 6, 4)}</p>
+                          <span className={`mt-1 inline-flex items-center gap-1 text-[11px] font-medium ${escrow.buyerConfirmed ? 'text-emerald-600' : 'text-surface-400'}`}>
+                            {escrow.buyerConfirmed ? '✅ Confirmed' : '⏳ Pending'}
+                          </span>
+                        </div>
+                        <div className="rounded-lg bg-surface-50 border border-surface-100 p-2.5">
+                          <p className="text-surface-400 mb-1 font-medium">Seller</p>
+                          <p className="font-mono font-semibold text-surface-700 text-[11px]">{shortAddress(escrow.sellerAddress, 6, 4)}</p>
+                          <span className={`mt-1 inline-flex items-center gap-1 text-[11px] font-medium ${escrow.sellerConfirmed ? 'text-emerald-600' : 'text-surface-400'}`}>
+                            {escrow.sellerConfirmed ? '✅ Confirmed' : '⏳ Pending'}
+                          </span>
+                        </div>
                       </div>
-                      {escrow.txSignature ? (
+                      {escrow.txSignature && (
                         <a
                           href={`https://solscan.io/tx/${escrow.txSignature}?cluster=devnet`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-emerald-400 hover:underline"
+                          className="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors"
                         >
-                          Xem tx trên Solscan →
+                          <ExternalLink className="h-3 w-3" />
+                          View on Solscan
                         </a>
-                      ) : null}
-                      <div className="flex flex-wrap gap-2">
-                        {escrow.status === 'Created' && address === escrow.buyerAddress ? (
-                          <Button
-                            disabled={escrowLoading !== null}
-                            onClick={async () => {
-                              setEscrowError(null);
-                              setEscrowLoading('fund');
-                              try {
-                                const res = await getUnsignedTx.mutateAsync({
-                                  path: `/escrow/${escrow.id}/fund`,
-                                });
-                                const sig = await signAndSendTx(res.txBase64);
-                                await fundEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
-                              } catch (err) {
-                                setEscrowError(err instanceof Error ? err.message : 'Fund failed');
-                              } finally {
-                                setEscrowLoading(null);
-                              }
-                            }}
-                          >
-                            {escrowLoading === 'fund' ? 'Đang ký & gửi...' : 'Fund (nạp tiền)'}
-                          </Button>
-                        ) : null}
+                      )}
+                    </div>
 
-                        {escrow.status === 'Funded' ? (
-                          <>
-                            {address === escrow.buyerAddress && !escrow.buyerConfirmed ? (
-                              <Button
-                                disabled={escrowLoading !== null}
-                                onClick={async () => {
-                                  setEscrowError(null);
-                                  setEscrowLoading('confirm-terms');
-                                  try {
-                                    const res = await getUnsignedTx.mutateAsync({
-                                      path: `/escrow/deal/${deal.id}/confirm-terms`,
-                                    });
-                                    if (res.txBase64) {
-                                      const sig = await signAndSendTx(res.txBase64);
-                                      await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: sig });
-                                    } else {
-                                      await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: 'skipped' });
-                                    }
-                                  } catch (err) {
-                                    setEscrowError(err instanceof Error ? err.message : 'Confirm terms failed');
-                                  } finally {
-                                    setEscrowLoading(null);
-                                  }
-                                }}
-                              >
-                                {escrowLoading === 'confirm-terms' ? 'Đang ký...' : 'Buyer: Confirm Terms'}
-                              </Button>
-                            ) : null}
-                            {address === escrow.sellerAddress && !escrow.sellerConfirmed ? (
-                              <Button
-                                disabled={escrowLoading !== null}
-                                onClick={async () => {
-                                  setEscrowError(null);
-                                  setEscrowLoading('confirm-terms');
-                                  try {
-                                    const res = await getUnsignedTx.mutateAsync({
-                                      path: `/escrow/deal/${deal.id}/confirm-terms`,
-                                    });
-                                    if (res.txBase64) {
-                                      const sig = await signAndSendTx(res.txBase64);
-                                      await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: sig });
-                                    } else {
-                                      await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: 'skipped' });
-                                    }
-                                  } catch (err) {
-                                    setEscrowError(err instanceof Error ? err.message : 'Confirm terms failed');
-                                  } finally {
-                                    setEscrowLoading(null);
-                                  }
-                                }}
-                              >
-                                {escrowLoading === 'confirm-terms' ? 'Đang ký...' : 'Seller: Confirm Terms'}
-                              </Button>
-                            ) : null}
-                            {escrow.buyerConfirmed && escrow.sellerConfirmed && address === escrow.sellerAddress ? (
-                              <Button
-                                disabled={escrowLoading !== null}
-                                onClick={async () => {
-                                  setEscrowError(null);
-                                  setEscrowLoading('submit-delivery');
-                                  try {
-                                    const res = await getUnsignedTx.mutateAsync({
-                                      path: `/escrow/deal/${deal.id}/submit-delivery`,
-                                    });
-                                    const sig = await signAndSendTx(res.txBase64);
-                                    await submitDelivery.mutateAsync({ escrowId: escrow.id, txSignature: sig });
-                                  } catch (err) {
-                                    setEscrowError(err instanceof Error ? err.message : 'Submit delivery failed');
-                                  } finally {
-                                    setEscrowLoading(null);
-                                  }
-                                }}
-                              >
-                                {escrowLoading === 'submit-delivery' ? 'Đang ký...' : 'Submit Delivery'}
-                              </Button>
-                            ) : null}
-                            {escrow.deliverySubmitted && address === escrow.buyerAddress ? (
-                              <Button
-                                disabled={escrowLoading !== null}
-                                onClick={async () => {
-                                  setEscrowError(null);
-                                  setEscrowLoading('release');
-                                  try {
-                                    const res = await getUnsignedTx.mutateAsync({
-                                      path: `/escrow/${escrow.id}/release`,
-                                    });
-                                    const sig = await signAndSendTx(res.txBase64);
-                                    await releaseEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
-                                  } catch (err) {
-                                    setEscrowError(err instanceof Error ? err.message : 'Release failed');
-                                  } finally {
-                                    setEscrowLoading(null);
-                                  }
-                                }}
-                              >
-                                {escrowLoading === 'release' ? 'Đang ký & gửi...' : 'Release (rút tiền)'}
-                              </Button>
-                            ) : null}
-                            {address === escrow.buyerAddress && escrow.status === 'Funded' ? (
-                              <Button
-                                variant="secondary"
-                                disabled={escrowLoading !== null}
-                                onClick={async () => {
-                                  setEscrowError(null);
-                                  setEscrowLoading('refund');
-                                  try {
-                                    const res = await getUnsignedTx.mutateAsync({
-                                      path: `/escrow/${escrow.id}/refund`,
-                                    });
-                                    const sig = await signAndSendTx(res.txBase64);
-                                    await refundEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
-                                  } catch (err) {
-                                    setEscrowError(err instanceof Error ? err.message : 'Refund failed');
-                                  } finally {
-                                    setEscrowLoading(null);
-                                  }
-                                }}
-                              >
-                                {escrowLoading === 'refund' ? 'Đang ký & gửi...' : 'Refund (hoàn tiền)'}
-                              </Button>
-                            ) : null}
-                          </>
-                        ) : null}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Alert title="Chưa tạo escrow">
-                        Tạo escrow trên Solana devnet để bắt đầu flow nạp tiền thật.
-                      </Alert>
-                      <Button
-                        disabled={!deal.sellerWallet || createEscrow.isPending || !address}
-                        onClick={async () => {
-                          setEscrowError(null);
-                          setEscrowLoading('create');
-                          try {
-                            const buyerWallet = address ?? '';
-                            const sellerWallet = deal.sellerWallet ?? '';
-                            if (!buyerWallet || buyerWallet.length < 32) {
-                              throw new Error('Buyer wallet address is invalid. Please reconnect Phantom.');
+                    {/* Escrow Actions */}
+                    <div className="space-y-2.5">
+                      {escrow.status === 'Created' && address === escrow.buyerAddress && (
+                        <Button
+                          className="w-full"
+                          onClick={async () => {
+                            setEscrowError(null);
+                            setEscrowLoading('fund');
+                            try {
+                              const res = await getUnsignedTx.mutateAsync({ path: `/escrow/${escrow.id}/fund` });
+                              const sig = await signAndSendTx(res.txBase64);
+                              await fundEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                            } catch (err) {
+                              setEscrowError(err instanceof Error ? err.message : 'Fund failed');
+                            } finally {
+                              setEscrowLoading(null);
                             }
-                            if (!sellerWallet || sellerWallet.length < 32) {
-                              throw new Error('Seller wallet address is invalid. Please invite seller first.');
-                            }
-                            const res = await createEscrow.mutateAsync({
-                              dealId: deal.id,
-                              amount: deal.amount,
-                              sellerWallet,
-                              buyerWallet,
-                            });
-                            const sig = await signAndSendTx(res.txBase64);
-                            await confirmCreated.mutateAsync({ escrowId: res.escrow.id, txSignature: sig });
-                          } catch (err) {
-                            setEscrowError(err instanceof Error ? err.message : 'Create escrow failed');
-                          } finally {
-                            setEscrowLoading(null);
+                          }}
+                          disabled={escrowLoading !== null}
+                        >
+                          <Wallet className="h-4 w-4 mr-1.5" />
+                          {escrowLoading === 'fund' ? 'Signing...' : 'Fund Escrow'}
+                        </Button>
+                      )}
+
+                      {escrow.status === 'Funded' && (
+                        <>
+                          {address === escrow.buyerAddress && !escrow.buyerConfirmed && (
+                            <Button
+                              className="w-full"
+                              onClick={async () => {
+                                setEscrowError(null);
+                                setEscrowLoading('confirm-terms');
+                                try {
+                                  const res = await getUnsignedTx.mutateAsync({ path: `/escrow/deal/${deal.id}/confirm-terms` });
+                                  if (res.txBase64) {
+                                    const sig = await signAndSendTx(res.txBase64);
+                                    await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                  } else {
+                                    await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: 'skipped' });
+                                  }
+                                } catch (err) {
+                                  setEscrowError(err instanceof Error ? err.message : 'Confirm failed');
+                                } finally {
+                                  setEscrowLoading(null);
+                                }
+                              }}
+                              disabled={escrowLoading !== null}
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                              {escrowLoading === 'confirm-terms' ? 'Signing...' : 'Buyer: Confirm Terms'}
+                            </Button>
+                          )}
+                          {address === escrow.sellerAddress && !escrow.sellerConfirmed && (
+                            <Button
+                              className="w-full"
+                              onClick={async () => {
+                                setEscrowError(null);
+                                setEscrowLoading('confirm-terms');
+                                try {
+                                  const res = await getUnsignedTx.mutateAsync({ path: `/escrow/deal/${deal.id}/confirm-terms` });
+                                  if (res.txBase64) {
+                                    const sig = await signAndSendTx(res.txBase64);
+                                    await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                  } else {
+                                    await confirmTerms.mutateAsync({ escrowId: escrow.id, txSignature: 'skipped' });
+                                  }
+                                } catch (err) {
+                                  setEscrowError(err instanceof Error ? err.message : 'Confirm failed');
+                                } finally {
+                                  setEscrowLoading(null);
+                                }
+                              }}
+                              disabled={escrowLoading !== null}
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                              {escrowLoading === 'confirm-terms' ? 'Signing...' : 'Seller: Confirm Terms'}
+                            </Button>
+                          )}
+                          {escrow.buyerConfirmed && escrow.sellerConfirmed && address === escrow.sellerAddress && (
+                            <Button
+                              className="w-full"
+                              onClick={async () => {
+                                setEscrowError(null);
+                                setEscrowLoading('submit-delivery');
+                                try {
+                                  const res = await getUnsignedTx.mutateAsync({ path: `/escrow/deal/${deal.id}/submit-delivery` });
+                                  const sig = await signAndSendTx(res.txBase64);
+                                  await submitDelivery.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                } catch (err) {
+                                  setEscrowError(err instanceof Error ? err.message : 'Submit delivery failed');
+                                } finally {
+                                  setEscrowLoading(null);
+                                }
+                              }}
+                              disabled={escrowLoading !== null}
+                            >
+                              <Send className="h-4 w-4 mr-1.5" />
+                              {escrowLoading === 'submit-delivery' ? 'Signing...' : 'Submit Delivery'}
+                            </Button>
+                          )}
+                          {escrow.deliverySubmitted && address === escrow.buyerAddress && (
+                            <Button
+                              className="w-full"
+                              onClick={async () => {
+                                setEscrowError(null);
+                                setEscrowLoading('release');
+                                try {
+                                  const res = await getUnsignedTx.mutateAsync({ path: `/escrow/${escrow.id}/release` });
+                                  const sig = await signAndSendTx(res.txBase64);
+                                  await releaseEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                } catch (err) {
+                                  setEscrowError(err instanceof Error ? err.message : 'Release failed');
+                                } finally {
+                                  setEscrowLoading(null);
+                                }
+                              }}
+                              disabled={escrowLoading !== null}
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                              {escrowLoading === 'release' ? 'Signing...' : 'Release Funds'}
+                            </Button>
+                          )}
+                          {address === escrow.buyerAddress && escrow.status === 'Funded' && (
+                            <Button
+                              className="w-full"
+                              variant="outline"
+                              onClick={async () => {
+                                setEscrowError(null);
+                                setEscrowLoading('refund');
+                                try {
+                                  const res = await getUnsignedTx.mutateAsync({ path: `/escrow/${escrow.id}/refund` });
+                                  const sig = await signAndSendTx(res.txBase64);
+                                  await refundEscrow.mutateAsync({ escrowId: escrow.id, txSignature: sig });
+                                } catch (err) {
+                                  setEscrowError(err instanceof Error ? err.message : 'Refund failed');
+                                } finally {
+                                  setEscrowLoading(null);
+                                }
+                              }}
+                              disabled={escrowLoading !== null}
+                            >
+                              {escrowLoading === 'refund' ? 'Signing...' : 'Refund'}
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <div className="w-14 h-14 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
+                      <Wallet className="h-6 w-6 text-surface-400" />
+                    </div>
+                    <p className="text-sm font-semibold text-surface-700 mb-1">No escrow created</p>
+                    <p className="text-xs text-surface-500 mb-5">
+                      Create an escrow on Solana devnet to start the fund flow.
+                    </p>
+                    <Button
+                      className="w-full"
+                      onClick={async () => {
+                        setEscrowError(null);
+                        setEscrowLoading('create');
+                        try {
+                          const buyerWallet = address ?? '';
+                          const sellerWalletVal = deal.sellerWallet ?? '';
+                          if (!buyerWallet || buyerWallet.length < 32) {
+                            throw new Error('Buyer wallet address is invalid. Please reconnect Phantom.');
                           }
-                        }}
-                      >
-                        {escrowLoading === 'create' ? 'Đang ký & tạo on-chain...' : 'Tạo escrow on-chain'}
-                      </Button>
-                    </>
-                  )}
-                </CardContent>
+                          if (!sellerWalletVal || sellerWalletVal.length < 32) {
+                            throw new Error('Seller wallet address is invalid. Please invite seller first.');
+                          }
+                          const res = await createEscrow.mutateAsync({
+                            dealId: deal.id,
+                            amount: deal.amount,
+                            sellerWallet: sellerWalletVal,
+                            buyerWallet,
+                          });
+                          const sig = await signAndSendTx(res.txBase64);
+                          await confirmCreated.mutateAsync({ escrowId: res.escrow.id, txSignature: sig });
+                        } catch (err) {
+                          setEscrowError(err instanceof Error ? err.message : 'Create escrow failed');
+                        } finally {
+                          setEscrowLoading(null);
+                        }
+                      }}
+                      disabled={!deal.sellerWallet || createEscrow.isPending || !address}
+                    >
+                      <Wallet className="h-4 w-4 mr-1.5" />
+                      {escrowLoading === 'create' ? 'Creating on-chain...' : 'Create Escrow'}
+                    </Button>
+                  </div>
+                )}
               </Card>
 
               {/* Dispute Card */}
-              <Card className="2xl:order-4 2xl:col-start-2">
-                <CardHeader className="pb-4">
-                  <CardTitle>Dispute flow</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Input
+              <Card padding="lg">
+                <div className="flex items-center gap-2.5 mb-5">
+                  <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center">
+                    <AlertTriangle className="h-4.5 w-4.5 text-red-600" />
+                  </div>
+                  <h2 className="text-base font-semibold text-surface-900">Dispute</h2>
+                </div>
+                <div className="space-y-3">
+                  <input
                     value={disputeReason}
                     onChange={(event) => setDisputeReason(event.target.value)}
                     placeholder="Reason"
+                    className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-2.5 text-sm text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-300 transition-all"
                   />
-                  <Textarea
-                    rows={4}
+                  <textarea
+                    rows={3}
                     value={disputeDescription}
                     onChange={(event) => setDisputeDescription(event.target.value)}
-                    placeholder="Mô tả chi tiết tranh chấp"
+                    placeholder="Describe the dispute in detail..."
+                    className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-300 transition-all resize-none"
                   />
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex gap-2">
                     <Button
-                      variant="secondary"
+                      variant="primary"
+                      size="sm"
                       onClick={async () => {
                         const dispute = await createDispute.mutateAsync({
                           dealId: deal.id,
@@ -774,11 +957,13 @@ export default function DealDetailPage() {
                         router.push(`/disputes/${dispute.id}`);
                       }}
                     >
-                      Mở dispute
+                      <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                      Open Dispute
                     </Button>
-                    {currentDispute.data ? (
+                    {currentDispute.data && (
                       <Button
-                        variant="ghost"
+                        variant="outline"
+                        size="sm"
                         onClick={() =>
                           addEvidence.mutate({
                             type: 'text',
@@ -786,30 +971,34 @@ export default function DealDetailPage() {
                           })
                         }
                       >
-                        Add evidence
+                        <FileText className="h-3.5 w-3.5 mr-1" />
+                        Add Evidence
                       </Button>
-                    ) : null}
+                    )}
                   </div>
-                  <Textarea
+                  <textarea
                     rows={2}
                     value={evidenceContent}
                     onChange={(event) => setEvidenceContent(event.target.value)}
-                    placeholder="Nội dung evidence text"
+                    placeholder="Evidence content..."
+                    className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-2.5 text-sm text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-300 transition-all resize-none"
                   />
-                  {(createDispute.error || addEvidence.error) ? (
-                    <Alert variant="danger" title="Dispute action failed">
-                      {(createDispute.error instanceof Error && createDispute.error.message) ||
-                        (addEvidence.error instanceof Error && addEvidence.error.message) ||
-                        'Lỗi không xác định.'}
-                    </Alert>
-                  ) : null}
-                </CardContent>
+                  {(createDispute.error || addEvidence.error) && (
+                    <div className="rounded-xl bg-red-50 border border-red-200 p-3 flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                      <p className="text-sm text-red-700">
+                        {(createDispute.error instanceof Error && createDispute.error.message) ||
+                          (addEvidence.error instanceof Error && addEvidence.error.message) ||
+                          'An error occurred.'}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </Card>
-
             </div>
           </div>
         )}
-      </AppShell>
-    </AuthGate>
+      </div>
+    </AppLayout>
   );
 }

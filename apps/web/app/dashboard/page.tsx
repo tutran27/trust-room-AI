@@ -1,236 +1,409 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Skeleton, Stat } from '@trustroom/ui';
-import { AppShell } from '../../components/app-shell';
-import { AuthGate } from '../../components/auth-gate';
-import { DealCard } from '../../components/deal-card';
-import { NotificationPanel } from '../../components/notification-panel';
-import { useDeals, useLeaderboard, useReputation } from '../../hooks/use-api';
-import { useAuth } from '../../providers/auth-provider';
-import { formatAmount } from '../../lib/format';
-import { shortAddress } from '../../lib/wallet';
+import {
+  TrendingUp,
+  ArrowRight,
+  FileText,
+  AlertTriangle,
+  DollarSign,
+  Shield,
+  Clock,
+  CheckCircle2,
+  Users,
+  Activity,
+  Zap,
+  ArrowUpRight,
+  ArrowDownRight,
+  Sparkles,
+  Plus,
+  Video,
+  RefreshCw,
+} from 'lucide-react';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { Card } from '@/components/ui/Card';
+import { StatCard } from '@/components/ui/StatCard';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { RiskIndicator } from '@/components/ui/RiskIndicator';
+import { Button } from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { apiFetch } from '@/lib/api';
 
-const QUICK_ACTIONS = [
-  {
-    label: 'Tạo deal mới',
-    href: '/deals/new',
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Xem disputes',
-    href: '/disputes',
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-      </svg>
-    ),
-  },
-];
+interface DashboardStats {
+  totalDeals: number;
+  activeDeals: number;
+  totalVolume: number;
+  activeDisputes: number;
+  recentDeals: any[];
+  riskAlerts: any[];
+}
 
 export default function DashboardPage() {
-  const { address, status } = useAuth();
-  const isAuthed = status === 'authenticated';
-  const deals = useDeals(undefined, isAuthed);
-  const reputation = useReputation(address);
-  const leaderboard = useLeaderboard();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  const dealCount = deals.data?.data.length ?? 0;
-  const score = reputation.data ? Math.round(reputation.data.score * 100) : null;
-  const volume = reputation.data ? formatAmount(reputation.data.totalVolume) : null;
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    async function fetchDashboard() {
+      try {
+      const [dealsRes, disputesRes] = await Promise.all([
+          apiFetch<{ deals: any[]; total: number }>('/deals?limit=5'),
+          apiFetch<{ disputes: any[] }>('/disputes?status=OPEN&limit=3'),
+        ]);
+
+        const deals = dealsRes?.deals || [];
+        const disputes = disputesRes?.disputes || [];
+
+        setStats({
+          totalDeals: dealsRes?.total || deals.length,
+          activeDeals: deals.filter((d: any) =>
+            ['NEGOTIATING', 'ESCROW_FUNDED', 'IN_MEETING'].includes(d.status)
+          ).length,
+          totalVolume: deals.reduce((sum: number, d: any) => sum + (d.amount || 0), 0),
+          activeDisputes: disputes.length,
+          recentDeals: deals.slice(0, 5),
+          riskAlerts: disputes.slice(0, 3),
+        });
+      } catch (err) {
+        console.error('Failed to load dashboard:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDashboard();
+  }, []);
+
+  const getGreeting = () => {
+    const hour = currentTime.getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   return (
-    <AuthGate>
-      <AppShell title="Dashboard">
-        <div className="space-y-8">
-          {/* Welcome + Stats Row */}
-          <section>
-            <div className="mb-6">
-              <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">
-                Tổng quan
+    <AppLayout>
+      <div className="space-y-8">
+        {/* Welcome Banner */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600 via-primary-500 to-accent-500 p-8 text-white">
+          {/* Background decoration */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+          <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/5 rounded-full" />
+
+          <div className="relative flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="w-5 h-5 text-white/80" />
+                <span className="text-sm font-medium text-white/80">
+                  {getGreeting()}
+                </span>
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight mb-1">
+                Welcome to TrustRoom
+              </h1>
+              <p className="text-sm text-white/70 max-w-md">
+                Your AI-powered deal platform. Manage escrows, conduct secure meetings, and close deals with confidence.
               </p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="relative overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent" />
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <Stat
-                      label="Tổng deal"
-                      value={dealCount}
-                      hint="Theo ví hiện tại"
-                    />
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
-                      </svg>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="relative overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <Stat
-                      label="Score uy tín"
-                      value={score !== null ? score : '—'}
-                      hint={reputation.data ? `${reputation.data.successfulDeals} deal thành công` : 'Đang tải'}
-                    />
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                      </svg>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="relative overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-500/40 to-transparent" />
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <Stat
-                      label="Khối lượng"
-                      value={volume ?? '—'}
-                      hint="Tổng volume tích lũy"
-                    />
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400">
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-                      </svg>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </section>
-
-          {/* Quick Actions */}
-          <section>
-            <div className="flex gap-3">
-              {QUICK_ACTIONS.map((action) => (
-                <Link key={action.href} href={action.href}>
-                  <div className="group flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-2.5 text-sm font-medium text-zinc-300 transition-all duration-150 hover:bg-white/[0.05] hover:border-white/[0.1] hover:text-zinc-100">
-                    <span className="text-zinc-500 transition-colors group-hover:text-emerald-400">
-                      {action.icon}
-                    </span>
-                    {action.label}
-                  </div>
+              <div className="flex items-center gap-3 mt-5">
+                <Link href="/deals">
+                  <Button className="bg-white text-primary-600 hover:bg-white/90 border-0 shadow-lg shadow-primary-700/20">
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    New Deal
+                  </Button>
                 </Link>
-              ))}
+                <Link href="/meetings/demo">
+                  <Button variant="ghost" className="text-white border border-white/20 hover:bg-white/10">
+                    <Video className="w-4 h-4 mr-1.5" />
+                    Start Meeting
+                  </Button>
+                </Link>
+              </div>
             </div>
-          </section>
-
-          {/* Main Content */}
-          <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-            <div className="space-y-6">
-              <section className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold tracking-tight text-zinc-100">Deals của bạn</h2>
-                  <Link href="/deals/new">
-                    <Button variant="ghost" className="text-zinc-400 text-xs">
-                      Xem tất cả →
-                    </Button>
-                  </Link>
-                </div>
-
-                {deals.isLoading ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Skeleton className="h-52" />
-                    <Skeleton className="h-52" />
-                  </div>
-                ) : deals.isError ? (
-                  <Alert variant="danger" title="Không tải được danh sách deal">
-                    {deals.error instanceof Error ? deals.error.message : 'Lỗi không xác định.'}
-                  </Alert>
-                ) : deals.data && deals.data.data.length > 0 ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {deals.data.data.slice(0, 6).map((deal) => (
-                      <DealCard key={deal.id} deal={deal} />
-                    ))}
-                  </div>
-                ) : (
-                  <Card className="border-dashed">
-                    <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400">
-                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                        </svg>
-                      </div>
-                      <p className="text-sm font-medium text-zinc-200">Chưa có deal nào</p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        Tạo deal đầu tiên để bắt đầu escrow, realtime chat và dispute demo.
-                      </p>
-                      <Link href="/deals/new" className="mt-4">
-                        <Button>Tạo deal mới</Button>
-                      </Link>
-                    </CardContent>
-                  </Card>
-                )}
-              </section>
-            </div>
-
-            {/* Right Sidebar */}
-            <div className="space-y-6">
-              <NotificationPanel />
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <span className="text-amber-400">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 0 1 3 3h-15a3 3 0 0 1 3-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 0 1-.982-3.172M9.497 14.25a7.454 7.454 0 0 0 .981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 0 0 7.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M18.75 4.236c.982.143 1.954.317 2.916.52A6.003 6.003 0 0 1 16.27 9.728M18.75 4.236V4.5c0 2.108-.966 3.99-2.48 5.228m0 0a6.003 6.003 0 0 1-3.52 1.108m3.52-1.108a6.003 6.003 0 0 0 3.52-1.108" />
-                      </svg>
-                    </span>
-                    Leaderboard
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {leaderboard.isLoading ? (
-                    <>
-                      <Skeleton className="h-11 rounded-xl" />
-                      <Skeleton className="h-11 rounded-xl" />
-                      <Skeleton className="h-11 rounded-xl" />
-                    </>
-                  ) : leaderboard.data && leaderboard.data.length > 0 ? (
-                    leaderboard.data.map((item, index) => (
-                      <div
-                        key={item.wallet}
-                        className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 transition-colors hover:bg-white/[0.04]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className={`flex h-6 w-6 items-center justify-center rounded-lg text-[11px] font-bold ${
-                            index === 0 ? 'bg-amber-500/15 text-amber-400' :
-                            index === 1 ? 'bg-zinc-300/10 text-zinc-300' :
-                            index === 2 ? 'bg-amber-700/15 text-amber-600' :
-                            'bg-white/[0.04] text-zinc-500'
-                          }`}>
-                            {index + 1}
-                          </span>
-                          <span className="font-mono text-xs text-zinc-300">{shortAddress(item.wallet, 6, 6)}</span>
-                        </div>
-                        <span className="text-sm font-semibold tabular-nums text-emerald-400">
-                          {Math.round(item.score * 100)}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="py-4 text-center">
-                      <p className="text-sm text-zinc-500">Chưa có dữ liệu leaderboard.</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            <div className="hidden lg:flex items-center gap-2 text-white/50 text-xs">
+              <Clock className="w-3.5 h-3.5" />
+              {currentTime.toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+              })}
             </div>
           </div>
         </div>
-      </AppShell>
-    </AuthGate>
+
+        {/* Stats Grid */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <Skeleton variant="stat" count={4} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <StatCard
+              label="Total Deals"
+              value={stats?.totalDeals || 0}
+              icon={FileText}
+              iconBg="bg-primary-500/10"
+              iconColor="text-primary-400"
+              trend={{ value: '+12%', positive: true }}
+            />
+            <StatCard
+              label="Active Deals"
+              value={stats?.activeDeals || 0}
+              icon={Activity}
+              iconBg="bg-accent-500/10"
+              iconColor="text-accent-400"
+            />
+            <StatCard
+              label="Total Volume"
+              value={`$${(stats?.totalVolume || 0).toLocaleString()}`}
+              icon={DollarSign}
+              iconBg="bg-success-500/10"
+              iconColor="text-success-400"
+              trend={{ value: '+8%', positive: true }}
+            />
+            <StatCard
+              label="Active Disputes"
+              value={stats?.activeDisputes || 0}
+              icon={AlertTriangle}
+              iconBg={stats?.activeDisputes ? 'bg-danger-500/10' : 'bg-surface-200'}
+              iconColor={stats?.activeDisputes ? 'text-danger-400' : 'text-surface-500'}
+            />
+          </div>
+        )}
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Recent Deals */}
+          <div className="lg:col-span-2">
+            <Card>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary-500/10 flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-primary-400" />
+                  </div>
+                  <h2 className="text-base font-semibold text-surface-900">Recent Deals</h2>
+                </div>
+                <Link href="/deals">
+                  <Button variant="ghost" size="sm">
+                    View all <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </Link>
+              </div>
+
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="animate-pulse flex items-center gap-4 p-3">
+                      <div className="w-10 h-10 bg-surface-200 rounded-xl" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 bg-surface-200 rounded w-1/3" />
+                        <div className="h-2.5 bg-surface-200 rounded w-1/2" />
+                      </div>
+                      <div className="h-5 bg-surface-200 rounded-full w-16" />
+                    </div>
+                  ))}
+                </div>
+              ) : stats?.recentDeals?.length ? (
+                <div className="space-y-1">
+                  {stats.recentDeals.map((deal: any, index: number) => (
+                    <Link
+                      key={deal.id}
+                      href={`/deals/${deal.id}`}
+                      className="flex items-center gap-4 p-3 rounded-xl hover:bg-surface-100 transition-colors group"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-primary-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-primary-500/20 transition-colors">
+                        <FileText className="w-4.5 h-4.5 text-primary-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-surface-900 truncate group-hover:text-primary-400 transition-colors">
+                          {deal.title}
+                        </p>
+                        <p className="text-xs text-surface-600 mt-0.5">
+                          ${deal.amount?.toLocaleString() || '0'} · {deal.buyer?.name || 'Buyer'}
+                        </p>
+                      </div>
+                      <StatusBadge type="deal" status={deal.status} />
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-14 h-14 rounded-2xl bg-surface-200 flex items-center justify-center mx-auto mb-4">
+                    <FileText className="w-6 h-6 text-surface-500" />
+                  </div>
+                  <p className="text-sm font-medium text-surface-600">No deals yet</p>
+                  <p className="text-xs text-surface-500 mt-1 mb-4">Create your first deal to get started</p>
+                  <Link href="/deals">
+                    <Button size="sm">
+                      <Plus className="w-3.5 h-3.5 mr-1" />
+                      Create Deal
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Risk Alerts */}
+          <div>
+            <Card>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-warning-500/10 flex items-center justify-center">
+                    <Shield className="w-4 h-4 text-warning-400" />
+                  </div>
+                  <h2 className="text-base font-semibold text-surface-900">Risk Alerts</h2>
+                </div>
+                <Link href="/disputes">
+                  <Button variant="ghost" size="sm">
+                    View all <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </Link>
+              </div>
+
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="animate-pulse p-3 rounded-xl bg-surface-100">
+                      <div className="h-3 bg-surface-200 rounded w-2/3 mb-2" />
+                      <div className="h-2.5 bg-surface-200 rounded w-1/2" />
+                    </div>
+                  ))}
+                </div>
+              ) : stats?.riskAlerts?.length ? (
+                <div className="space-y-3">
+                  {stats.riskAlerts.map((alert: any) => (
+                    <Link
+                      key={alert.id}
+                      href={`/disputes/${alert.id}`}
+                      className="block p-3.5 rounded-xl bg-surface-100 hover:bg-surface-200 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-surface-900 truncate">
+                            {alert.title || 'Dispute'}
+                          </p>
+                          <p className="text-xs text-surface-600 mt-1 line-clamp-2">
+                            {alert.reason || alert.description}
+                          </p>
+                        </div>
+                        <AlertTriangle className="w-4 h-4 text-warning-400 flex-shrink-0 mt-0.5" />
+                      </div>
+                      <div className="mt-2.5">
+                        <RiskIndicator
+                          level={alert.riskLevel || 'medium'}
+                          size="sm"
+                        />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10">
+                  <div className="w-14 h-14 rounded-2xl bg-success-500/10 flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle2 className="w-6 h-6 text-success-400" />
+                  </div>
+                  <p className="text-sm font-medium text-surface-600">All clear!</p>
+                  <p className="text-xs text-surface-500 mt-1">No active risk alerts</p>
+                </div>
+              )}
+            </Card>
+          </div>
+        </div>
+
+        {/* Quick Actions & Activity */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Quick Actions */}
+          <Card>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-accent-500/10 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-accent-400" />
+              </div>
+              <h2 className="text-base font-semibold text-surface-900">Quick Actions</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Link href="/deals">
+                <div className="flex flex-col items-center gap-2.5 p-4 rounded-xl border border-surface-200 hover:border-primary-400 hover:bg-primary-500/5 transition-all cursor-pointer group text-center">
+                  <div className="w-10 h-10 rounded-xl bg-primary-500/10 flex items-center justify-center group-hover:bg-primary-500/20 group-hover:scale-105 transition-all">
+                    <FileText className="w-5 h-5 text-primary-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-surface-900">New Deal</p>
+                    <p className="text-xs text-surface-600 mt-0.5">Create a deal</p>
+                  </div>
+                </div>
+              </Link>
+              <Link href="/meetings/demo">
+                <div className="flex flex-col items-center gap-2.5 p-4 rounded-xl border border-surface-200 hover:border-accent-400 hover:bg-accent-500/5 transition-all cursor-pointer group text-center">
+                  <div className="w-10 h-10 rounded-xl bg-accent-500/10 flex items-center justify-center group-hover:bg-accent-500/20 group-hover:scale-105 transition-all">
+                    <Users className="w-5 h-5 text-accent-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-surface-900">Meeting</p>
+                    <p className="text-xs text-surface-600 mt-0.5">Start video call</p>
+                  </div>
+                </div>
+              </Link>
+              <Link href="/disputes">
+                <div className="flex flex-col items-center gap-2.5 p-4 rounded-xl border border-surface-200 hover:border-warning-400 hover:bg-warning-500/5 transition-all cursor-pointer group text-center">
+                  <div className="w-10 h-10 rounded-xl bg-warning-500/10 flex items-center justify-center group-hover:bg-warning-500/20 group-hover:scale-105 transition-all">
+                    <AlertTriangle className="w-5 h-5 text-warning-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-surface-900">Dispute</p>
+                    <p className="text-xs text-surface-600 mt-0.5">Resolve issues</p>
+                  </div>
+                </div>
+              </Link>
+            </div>
+          </Card>
+
+          {/* Platform Status */}
+          <Card>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-success-500/10 flex items-center justify-center">
+                <Activity className="w-4 h-4 text-success-400" />
+              </div>
+              <h2 className="text-base font-semibold text-surface-900">Platform Status</h2>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-surface-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-success-400 animate-pulse" />
+                  <span className="text-sm text-surface-700">Solana Network</span>
+                </div>
+                <span className="text-xs font-medium text-success-400 bg-success-500/10 px-2 py-0.5 rounded-full">Operational</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-surface-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-success-400 animate-pulse" />
+                  <span className="text-sm text-surface-700">AI Services</span>
+                </div>
+                <span className="text-xs font-medium text-success-400 bg-success-500/10 px-2 py-0.5 rounded-full">Operational</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-surface-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-success-400 animate-pulse" />
+                  <span className="text-sm text-surface-700">Video Meetings</span>
+                </div>
+                <span className="text-xs font-medium text-success-400 bg-success-500/10 px-2 py-0.5 rounded-full">Operational</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-surface-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-success-400 animate-pulse" />
+                  <span className="text-sm text-surface-700">Escrow Contracts</span>
+                </div>
+                <span className="text-xs font-medium text-success-400 bg-success-500/10 px-2 py-0.5 rounded-full">Operational</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+    </AppLayout>
   );
 }
