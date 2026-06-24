@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   description:
     'AI-powered deal management with Solana escrow, real-time meetings, and risk detection.',
   icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
+    icon: '/favicon.png',
+    shortcut: '/favicon.png',
   },
 };
 
