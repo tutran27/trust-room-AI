@@ -50,15 +50,80 @@ export class WebsocketGateway
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
+  // ── User room (notifications) ──
+  @SubscribeMessage('join_user')
+  handleJoinUser(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { wallet: string },
+  ) {
+    if (!data.wallet) {
+      return { event: 'join_error', data: { code: 'WALLET_REQUIRED' } };
+    }
+    client.data.wallet = data.wallet;
+    client.join(`user:${data.wallet}`);
+    this.logger.log(`Client ${client.id} joined user:${data.wallet}`);
+    return { event: 'joined', data: { wallet: data.wallet } };
+  }
+
+  // ── Deal room (chat + scam guard) ──
   @SubscribeMessage('join_deal')
-  handleJoinDeal(
+  async handleJoinDeal(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { dealId: string; wallet?: string },
   ) {
+    if (!data.wallet) {
+      return { event: 'join_error', data: { code: 'WALLET_REQUIRED' } };
+    }
+
+    // Verify wallet is a participant of the deal
+    let participant: { role: string } | null = null;
+    try {
+      participant = await this.prisma.dealParticipant.findUnique({
+        where: {
+          dealId_walletAddress: {
+            dealId: data.dealId,
+            walletAddress: data.wallet,
+          },
+        },
+        select: { role: true },
+      });
+    } catch {
+      // Fallback: findMany if unique constraint name differs
+      try {
+        const results = await this.prisma.dealParticipant.findMany({
+          where: { dealId: data.dealId, walletAddress: data.wallet },
+          select: { role: true },
+          take: 1,
+        });
+        participant = results[0] ?? null;
+      } catch {
+        // best-effort
+      }
+    }
+
+    if (!participant) {
+      client.emit('deal_error', {
+        dealId: data.dealId,
+        code: 'DEAL_FORBIDDEN',
+        message: 'You are not a participant of this deal.',
+      });
+      return { event: 'join_error', data: { code: 'DEAL_FORBIDDEN' } };
+    }
+
+    // Store wallet and role on client data for authenticated operations
+    client.data.wallet = data.wallet;
+    if (!client.data.dealRoles) client.data.dealRoles = {};
+    client.data.dealRoles[data.dealId] = participant.role;
+
     client.join(`deal:${data.dealId}`);
-    if (data.wallet) client.join(`user:${data.wallet}`);
-    this.logger.log(`Client ${client.id} joined deal:${data.dealId}`);
-    return { event: 'joined', data: { dealId: data.dealId } };
+    client.join(`user:${data.wallet}`);
+    this.logger.log(
+      `Client ${client.id} joined deal:${data.dealId} as ${participant.role}`,
+    );
+    return {
+      event: 'joined',
+      data: { dealId: data.dealId, role: participant.role },
+    };
   }
 
   @SubscribeMessage('leave_deal')
@@ -71,11 +136,16 @@ export class WebsocketGateway
   }
 
   /**
-   * A chat / transcript message in a deal room. Broadcasts the message AND runs it
-   * through the deterministic Scam Guard. Any risk that fires is broadcast as a
-   * `risk_detected` event (powering the realtime AI Monitor panel), persisted to the
-   * deal timeline, and surfaced as a notification. All persistence is best-effort —
-   * a DB hiccup never drops the realtime message.
+   * A chat / transcript message in a deal room. Runs the message through the
+   * Scam Guard FIRST, then conditionally broadcasts. Never trusts `sender` or
+   * `speakerRole` from the client — uses `client.data` populated at join time.
+   *
+   * Flow:
+   * 1. Verify the sender is authenticated (has wallet in client.data)
+   * 2. Verify the sender is a participant of the deal
+   * 3. Run Scam Guard analysis
+   * 4. If blockMessage → emit message_blocked + risk_detected (no raw broadcast)
+   * 5. Otherwise → broadcast to room, persist transcript
    */
   @SubscribeMessage('chat_message')
   async handleChatMessage(
@@ -85,24 +155,93 @@ export class WebsocketGateway
     const room = `deal:${data.dealId}`;
     const timestamp = new Date().toISOString();
 
-    // Broadcast to everyone EXCEPT sender (sender already has optimistic update)
-    client.broadcast.to(room).emit('chat_message', {
+    // 1. Use authenticated wallet from client.data, NOT from payload
+    const wallet = client.data.wallet as string | undefined;
+    if (!wallet) {
+      return {
+        event: 'join_error',
+        data: { code: 'NOT_AUTHENTICATED', message: 'Join a deal room first with a valid wallet.' },
+      };
+    }
+
+    // 2. Verify participant from stored role
+    const role = client.data.dealRoles?.[data.dealId] as string | undefined;
+    if (!role) {
+      client.emit('deal_error', {
+        dealId: data.dealId,
+        code: 'DEAL_FORBIDDEN',
+        message: 'You must join this deal room first.',
+      });
+      return { event: 'join_error', data: { code: 'DEAL_FORBIDDEN' } };
+    }
+
+    // Build trusted sender info
+    const trustedSender = wallet;
+    const trustedRole = role as 'buyer' | 'seller' | 'ai' | 'system';
+
+    // 3. Run Scam Guard BEFORE broadcast — get back analysis or undefined
+    const analysis = await this.runScamGuard(
+      {
+        dealId: data.dealId,
+        message: data.message,
+        sender: trustedSender,
+        speakerRole: trustedRole,
+      },
+      timestamp,
+    );
+
+    // 4. If blockMessage → do NOT broadcast raw message
+    if (analysis?.blockMessage) {
+      client.emit('message_blocked', {
+        dealId: data.dealId,
+        reason: analysis.suggestedAction ?? 'Message blocked by Scam Guard.',
+        intents: analysis.intents,
+        level: analysis.level,
+      });
+
+      // Persist the blocked event (best-effort)
+      void this.persistEvent(data.dealId, trustedSender, 'message.blocked', {
+        text: data.message,
+        speakerRole: trustedRole,
+        intents: analysis.intents,
+        level: analysis.level,
+      });
+
+      return { event: 'message_blocked' };
+    }
+
+    // 5. Broadcast to room
+    this.server.to(room).emit('chat_message', {
       dealId: data.dealId,
       message: data.message,
-      sender: data.sender,
-      speakerRole: data.speakerRole ?? 'buyer',
+      sender: trustedSender,
+      speakerRole: trustedRole,
       timestamp,
     });
 
-    await this.runScamGuard(data, timestamp);
     return { event: 'message_sent' };
   }
 
-  private async runScamGuard(data: ChatMessagePayload, timestamp: string) {
+  /**
+   * Run Scam Guard analysis and broadcast risk events. Returns the analysis
+   * result (or undefined if no signals fired) so the caller can check
+   * blockMessage before broadcasting the raw message.
+   */
+  private async runScamGuard(
+    data: ChatMessagePayload,
+    timestamp: string,
+  ): Promise<{
+    blockMessage: boolean;
+    suggestedAction?: string;
+    intents: string[];
+    level: string;
+    lockRelease: boolean;
+    signals: unknown[];
+    finalScore: number;
+    [key: string]: unknown;
+  } | undefined> {
     const context = await this.loadDealContext(data.dealId);
 
-    // Full-context analysis: rules + wallet/link parser + (optional) LLM intent
-    // classifier + wallet/escrow-state/evidence risk + repetition penalty.
     const analysis = await analyzeMessage(
       {
         message: data.message,
@@ -119,13 +258,13 @@ export class WebsocketGateway
       this.llm,
     );
 
-    // Persist the transcript chunk to the deal timeline (best-effort).
+    // Persist the transcript chunk (best-effort).
     void this.persistEvent(data.dealId, data.sender, 'transcript.chunk', {
       text: data.message,
       speakerRole: data.speakerRole ?? 'buyer',
     });
 
-    if (analysis.signals.length === 0) return;
+    if (analysis.signals.length === 0) return undefined;
 
     const payload = {
       dealId: data.dealId,
@@ -154,7 +293,7 @@ export class WebsocketGateway
 
     void this.persistEvent(data.dealId, data.sender, 'risk.detected', payload);
 
-    // Notify the deal participants of a high/critical alert.
+    // Notify participants of high/critical alert.
     if (analysis.finalLevel === 'high' || analysis.finalLevel === 'critical') {
       void this.notifyParticipants(
         data.dealId,
@@ -162,6 +301,16 @@ export class WebsocketGateway
         analysis.suggestedAction,
       );
     }
+
+    return {
+      blockMessage: analysis.blockMessage,
+      suggestedAction: analysis.suggestedAction,
+      intents: analysis.intents,
+      level: analysis.finalLevel,
+      lockRelease: analysis.lockRelease,
+      signals: analysis.signals,
+      finalScore: analysis.finalScore,
+    };
   }
 
   /**
@@ -187,7 +336,7 @@ export class WebsocketGateway
         select: {
           status: true,
           participants: { select: { walletAddress: true } },
-          escrow: { select: { status: true, buyerAddress: true, sellerAddress: true } },
+          escrow: { select: { status: true } },
         },
       });
       if (deal) {
@@ -196,8 +345,6 @@ export class WebsocketGateway
         for (const p of deal.participants) {
           if (p.walletAddress) knownAddresses.add(p.walletAddress);
         }
-        if (deal.escrow?.buyerAddress) knownAddresses.add(deal.escrow.buyerAddress);
-        if (deal.escrow?.sellerAddress) knownAddresses.add(deal.escrow.sellerAddress);
       }
     } catch {
       // default to Negotiating if the deal can't be loaded
@@ -294,8 +441,22 @@ export class WebsocketGateway
     @MessageBody() data: { meetingId: string; wallet?: string },
   ) {
     client.join(`meeting:${data.meetingId}`);
-    if (data.wallet) client.join(`user:${data.wallet}`);
+    if (data.wallet) {
+      client.data.wallet = data.wallet;
+      client.join(`user:${data.wallet}`);
+    }
     this.logger.log(`Client ${client.id} joined meeting:${data.meetingId}`);
+
+    // Notify other participants that a user joined
+    const wallet = data.wallet ?? client.data.wallet;
+    if (wallet) {
+      client.to(`meeting:${data.meetingId}`).emit('user_joined', {
+        meetingId: data.meetingId,
+        wallet,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     return { event: 'joined', data: { meetingId: data.meetingId } };
   }
 
@@ -304,7 +465,18 @@ export class WebsocketGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { meetingId: string },
   ) {
+    const wallet = client.data.wallet as string | undefined;
     client.leave(`meeting:${data.meetingId}`);
+
+    // Notify other participants that a user left
+    if (wallet) {
+      client.to(`meeting:${data.meetingId}`).emit('user_left', {
+        meetingId: data.meetingId,
+        wallet,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     return { event: 'left', data: { meetingId: data.meetingId } };
   }
 

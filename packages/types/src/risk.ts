@@ -24,6 +24,16 @@ export const scamIntentSchema = z.enum([
   'ambiguous_terms',
   'unverified_delivery',
   'phishing_link',
+  'guaranteed_profit',
+  'fake_investment_app',
+  'recovery_fee',
+  'secrecy_pressure',
+  'emergency_money_request',
+  'gift_card_wire_transfer',
+  'remote_access_request',
+  'fake_support_admin',
+  'qr_payment_lure',
+  'story_inconsistency',
 ]);
 export type ScamIntent = z.infer<typeof scamIntentSchema>;
 
@@ -57,6 +67,26 @@ export const SCAM_INTENT_SUGGESTED_ACTION: Record<ScamIntent, string> = {
     'Do not release without valid delivery proof (file, tx hash, or on-chain ownership transfer).',
   phishing_link:
     'Do not open the link or install anything. It may be a phishing or wallet-draining attempt.',
+  guaranteed_profit:
+    'Promises of guaranteed profit or high fixed returns are investment scams. No legitimate deal guarantees returns.',
+  fake_investment_app:
+    'Do not install or sign up for any app the counterparty recommends. This is a common pig-butchering scam.',
+  recovery_fee:
+    'Requests for "recovery fees" or "unlock fees" are always scams. No legitimate platform charges these.',
+  secrecy_pressure:
+    'Do not accept pressure to keep the deal secret. Legitimate deals do not require secrecy.',
+  emergency_money_request:
+    'Emotional emergency money requests are manipulation tactics. Verify claims before releasing funds.',
+  gift_card_wire_transfer:
+    'Gift cards, wire transfers, and prepaid cards are untraceable and favored by scammers. Never use these for deals.',
+  remote_access_request:
+    'Never install remote access software (AnyDesk, TeamViewer) for a counterparty. They can steal your funds.',
+  fake_support_admin:
+    'TrustRoom staff will never ask you to release funds or share credentials through chat. This is an impersonator.',
+  qr_payment_lure:
+    'QR codes and wallet verification links can steal your credentials or sign malicious transactions. Do not scan or click.',
+  story_inconsistency:
+    'The counterparty is changing their story or contradicting earlier statements. Verify all claims independently.',
 };
 
 /** Maps a 0-100 score to a risk level. Thresholds per the technical brief §5.7. */

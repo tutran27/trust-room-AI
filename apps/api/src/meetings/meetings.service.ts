@@ -322,7 +322,7 @@ export class MeetingsService {
             id: true,
             status: true,
             participants: { select: { walletAddress: true, role: true } },
-            escrow: { select: { status: true, buyerAddress: true, sellerAddress: true } },
+            escrow: { select: { status: true } },
           },
         },
         participants: {
@@ -1328,8 +1328,6 @@ export class MeetingsService {
         participants: Array<{ walletAddress: string; role: string }>;
         escrow: {
           status: string;
-          buyerAddress: string | null;
-          sellerAddress: string | null;
         } | null;
       };
     },
@@ -1339,8 +1337,6 @@ export class MeetingsService {
     for (const participant of session.deal.participants) {
       if (participant.walletAddress) knownAddresses.add(participant.walletAddress);
     }
-    if (session.deal.escrow?.buyerAddress) knownAddresses.add(session.deal.escrow.buyerAddress);
-    if (session.deal.escrow?.sellerAddress) knownAddresses.add(session.deal.escrow.sellerAddress);
 
     const [recentRiskEvents, recentTranscripts] = await Promise.all([
       this.prisma.meetingRiskEvent.findMany({

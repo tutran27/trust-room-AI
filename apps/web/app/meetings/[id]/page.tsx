@@ -52,11 +52,18 @@ interface RealtimeEntry {
   endTime: number | null;
   isFinal: boolean;
   updatedAt: number;
+  source: 'stream' | 'persisted';
+}
+
+const SPEAKER_TURN_SILENCE_WINDOW_SECONDS = 14;
+
+function normalizeRealtimeText(value: string) {
+  return value.trim().replace(/\s+/g, ' ');
 }
 
 function mergeRealtimeText(currentText: string, nextText: string) {
-  const left = currentText.trim();
-  const right = nextText.trim();
+  const left = normalizeRealtimeText(currentText);
+  const right = normalizeRealtimeText(nextText);
 
   if (!left) return right;
   if (!right) return left;
@@ -82,33 +89,143 @@ function mergeRealtimeText(currentText: string, nextText: string) {
   return `${left} ${right}`.trim();
 }
 
+function isRealtimeTextEquivalent(currentText: string, nextText: string) {
+  const left = normalizeRealtimeText(currentText);
+  const right = normalizeRealtimeText(nextText);
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left === right ||
+    left.startsWith(right) ||
+    right.startsWith(left) ||
+    left.endsWith(right) ||
+    right.endsWith(left)
+  );
+}
+
+function shouldMergeRealtimeEntries(previous: RealtimeEntry | undefined, entry: RealtimeEntry) {
+  if (!previous) {
+    return false;
+  }
+
+  if (
+    previous.speakerLabel !== entry.speakerLabel ||
+    previous.language !== entry.language ||
+    previous.source !== entry.source
+  ) {
+    return false;
+  }
+
+  const previousEnd = previous.endTime ?? previous.startTime;
+  const entryStart = entry.startTime ?? entry.endTime;
+  const timingGap =
+    previousEnd !== null && entryStart !== null ? Math.abs(entryStart - previousEnd) : null;
+
+  return (
+    isRealtimeTextEquivalent(previous.text, entry.text) ||
+    (timingGap !== null && timingGap <= 4 && (!previous.isFinal || !entry.isFinal))
+  );
+}
+
+function shouldReplaceOptimisticEntry(entry: RealtimeEntry, transcript: {
+  speakerLabel?: string;
+  content?: string;
+  language?: string;
+  startTime?: number;
+  endTime?: number | null;
+}) {
+  if (entry.source !== 'stream') {
+    return false;
+  }
+
+  const sameSpeaker = entry.speakerLabel === (transcript.speakerLabel ?? 'speaker');
+  const sameLanguage = entry.language === (transcript.language ?? 'und');
+  const sameText = isRealtimeTextEquivalent(entry.text, transcript.content ?? '');
+  const transcriptStart = transcript.startTime ?? null;
+  const transcriptEnd = transcript.endTime ?? null;
+  const entryTime = entry.startTime ?? entry.endTime;
+  const transcriptTime = transcriptStart ?? transcriptEnd;
+  const closeTime =
+    entryTime !== null && transcriptTime !== null ? Math.abs(entryTime - transcriptTime) <= 4 : true;
+
+  return sameSpeaker && sameLanguage && sameText && closeTime;
+}
+
+function shouldBelongToSameSpeakerTurn(
+  previous: RealtimeEntry | undefined,
+  next: {
+    speakerLabel: string;
+    language: string;
+    text: string;
+    startTime: number | null;
+    endTime: number | null;
+    updatedAt: number;
+    isFinal: boolean;
+  },
+) {
+  if (!previous) {
+    return false;
+  }
+
+  if (
+    previous.speakerLabel !== next.speakerLabel ||
+    previous.language !== next.language
+  ) {
+    return false;
+  }
+
+  const previousTime = previous.endTime ?? previous.startTime ?? previous.updatedAt / 1000;
+  const nextTime = next.endTime ?? next.startTime ?? next.updatedAt / 1000;
+  const timeGap = Math.abs(nextTime - previousTime);
+
+  return (
+    !previous.isFinal ||
+    !next.isFinal ||
+    isRealtimeTextEquivalent(previous.text, next.text) ||
+    timeGap <= SPEAKER_TURN_SILENCE_WINDOW_SECONDS
+  );
+}
+
 function groupRealtimeEntries(entries: RealtimeEntry[]) {
   const grouped: RealtimeEntry[] = [];
 
   for (const entry of [...entries].sort((left, right) => left.updatedAt - right.updatedAt)) {
     const previous = grouped[grouped.length - 1];
     const canMerge =
-      previous &&
-      previous.speakerLabel === entry.speakerLabel &&
-      previous.language === entry.language;
+      shouldMergeRealtimeEntries(previous, entry) ||
+      shouldBelongToSameSpeakerTurn(previous, {
+        speakerLabel: entry.speakerLabel,
+        language: entry.language,
+        text: entry.text,
+        startTime: entry.startTime,
+        endTime: entry.endTime,
+        updatedAt: entry.updatedAt,
+        isFinal: entry.isFinal,
+      });
 
     if (!canMerge) {
       grouped.push({ ...entry });
       continue;
     }
 
+    const mergedBase = previous as RealtimeEntry;
+
     grouped[grouped.length - 1] = {
-      ...previous,
+      ...mergedBase,
       id: entry.id,
-      text: mergeRealtimeText(previous.text, entry.text),
+      text: mergeRealtimeText(mergedBase.text, entry.text),
       translatedText:
-        previous.translatedText || entry.translatedText
-          ? mergeRealtimeText(previous.translatedText ?? '', entry.translatedText ?? '')
+        mergedBase.translatedText || entry.translatedText
+          ? mergeRealtimeText(mergedBase.translatedText ?? '', entry.translatedText ?? '')
           : null,
-      targetLanguage: entry.targetLanguage ?? previous.targetLanguage,
-      endTime: entry.endTime ?? previous.endTime,
+      targetLanguage: entry.targetLanguage ?? mergedBase.targetLanguage,
+      endTime: entry.endTime ?? mergedBase.endTime,
       isFinal: entry.isFinal,
       updatedAt: entry.updatedAt,
+      source: entry.source,
     };
   }
 
@@ -203,6 +320,7 @@ export default function MeetingDetailPage() {
   const addTranslationMutation = useAddMeetingTranslation(meetingId ?? '');
   const startSttMutation = useStartMeetingStt(meetingId ?? '');
   const stopSttMutation = useStopMeetingStt(meetingId ?? '');
+  const agoraUidSaltRef = useRef<number | null>(null);
 
   const [agoraUid, setAgoraUid] = useState(0);
 
@@ -213,15 +331,17 @@ export default function MeetingDetailPage() {
     for (let index = 0; index < base.length; index += 1) {
       hash = (hash * 31 + base.charCodeAt(index)) >>> 0;
     }
-    const stored = sessionStorage.getItem('agora_uid_salt');
-    const salt = stored
-      ? parseInt(stored, 10)
-      : Math.floor(Math.random() * 900_000) + 100_000;
-    if (!stored) {
-      try { sessionStorage.setItem('agora_uid_salt', String(salt)); } catch {}
+    if (agoraUidSaltRef.current === null && typeof window !== 'undefined') {
+      const bytes = new Uint32Array(1);
+      window.crypto.getRandomValues(bytes);
+      agoraUidSaltRef.current = ((bytes[0] ?? 0) % 900_000) + 100_000;
     }
-    setAgoraUid(((hash + salt) % 900_000) + 1000);
-  }, [address]);
+    const meetingHash = meetingId
+      ? meetingId.split('').reduce((acc, char) => ((acc * 33) + char.charCodeAt(0)) >>> 0, 0)
+      : 0;
+    const salt = agoraUidSaltRef.current ?? 0;
+    setAgoraUid(((hash + meetingHash + salt) % 900_000) + 1000);
+  }, [address, meetingId]);
 
   const tokenQuery = useAgoraToken(
     meetingId,
@@ -359,7 +479,27 @@ export default function MeetingDetailPage() {
       }
       const translation = transcript.translations?.[0];
       setRealtimeEntries((current) => {
-        const next = current.filter((entry) => entry.id !== transcriptId);
+        const sorted = [...current].sort((left, right) => left.updatedAt - right.updatedAt);
+        const previous = [...sorted]
+          .reverse()
+          .find((entry) =>
+            shouldBelongToSameSpeakerTurn(entry, {
+              speakerLabel: transcript.speakerLabel ?? 'speaker',
+              language: transcript.language ?? 'und',
+              text: transcript.content ?? '',
+              startTime: transcript.startTime ?? null,
+              endTime: transcript.endTime ?? null,
+              updatedAt: Date.now(),
+              isFinal: true,
+            }),
+          );
+
+        const next = current.filter(
+          (entry) =>
+            entry.id !== transcriptId &&
+            entry.id !== previous?.id &&
+            !shouldReplaceOptimisticEntry(entry, transcript),
+        );
         next.push({
           id: transcriptId,
           speakerLabel: transcript.speakerLabel ?? 'speaker',
@@ -371,6 +511,7 @@ export default function MeetingDetailPage() {
           endTime: transcript.endTime ?? null,
           isFinal: true,
           updatedAt: Date.now(),
+          source: 'persisted',
         });
         return next.sort((left, right) => left.updatedAt - right.updatedAt).slice(-12);
       });
@@ -402,7 +543,47 @@ export default function MeetingDetailPage() {
 
   function upsertRealtimeEntry(chunk: AgoraRealtimeTranscriptChunk) {
     setRealtimeEntries((current) => {
+      const sorted = [...current].sort((left, right) => left.updatedAt - right.updatedAt);
+      const previous = [...sorted]
+        .reverse()
+        .find((entry) =>
+          shouldBelongToSameSpeakerTurn(entry, {
+            speakerLabel: chunk.speakerLabel,
+            language: chunk.language,
+            text: chunk.text,
+            startTime: chunk.startTime,
+            endTime: chunk.endTime,
+            updatedAt: chunk.receivedAt,
+            isFinal: chunk.isFinal,
+          }),
+        );
       const next = current.filter((entry) => entry.id !== chunk.chunkId);
+
+      if (previous) {
+        const previousId = previous!.id;
+        const mergedText = mergeRealtimeText(previous!.text, chunk.text);
+        const mergedTranslatedText =
+          previous!.translatedText || chunk.translatedText
+            ? mergeRealtimeText(previous!.translatedText ?? '', chunk.translatedText ?? '')
+            : null;
+
+        return next
+          .filter((entry) => entry.id !== previousId)
+          .concat({
+            ...previous!,
+            id: chunk.chunkId,
+            text: mergedText,
+            translatedText: mergedTranslatedText,
+            targetLanguage: chunk.targetLanguage ?? previous!.targetLanguage,
+            startTime: previous!.startTime ?? chunk.startTime,
+            endTime: chunk.endTime ?? previous!.endTime,
+            isFinal: chunk.isFinal,
+            updatedAt: chunk.receivedAt,
+            source: 'stream' as const,
+          })
+          .sort((left, right) => left.updatedAt - right.updatedAt);
+      }
+
       next.push({
         id: chunk.chunkId,
         speakerLabel: chunk.speakerLabel,
@@ -414,6 +595,7 @@ export default function MeetingDetailPage() {
         endTime: chunk.endTime,
         isFinal: chunk.isFinal,
         updatedAt: chunk.receivedAt,
+        source: 'stream',
       });
       return next.sort((left, right) => left.updatedAt - right.updatedAt);
     });

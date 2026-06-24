@@ -254,6 +254,8 @@ enum NotificationType {
   TermsUploaded
   AiAlert
   SystemMessage
+  DealInvite
+  MessageBlocked
 }
 
 model Notification {

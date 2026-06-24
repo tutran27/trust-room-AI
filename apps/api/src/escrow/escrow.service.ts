@@ -14,6 +14,31 @@ import { SolanaService } from './solana.service';
 
 @Injectable()
 export class EscrowService {
+  private readonly escrowBaseSelect = {
+    id: true,
+    dealId: true,
+    amount: true,
+    tokenMint: true,
+    dealIdHash: true,
+    status: true,
+    txSignature: true,
+    buyerConfirmed: true,
+    sellerConfirmed: true,
+    deliverySubmitted: true,
+    createdAt: true,
+    updatedAt: true,
+    deal: {
+      select: {
+        participants: {
+          select: {
+            walletAddress: true,
+            role: true,
+          },
+        },
+      },
+    },
+  } as const;
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(NotificationsService)
@@ -113,8 +138,11 @@ export class EscrowService {
       data: { status: 'Funded', txSignature },
     });
 
-    await this.notify(escrow.dealId, escrow.buyerAddress, 'PaymentReceived', 'Escrow funded',
-      `Funds deposited into escrow (${escrow.amount} SOL).`);
+    const buyerAddress = this.getBuyerAddress(escrow);
+    if (buyerAddress) {
+      await this.notify(escrow.dealId, buyerAddress, 'PaymentReceived', 'Escrow funded',
+        `Funds deposited into escrow (${escrow.amount} SOL).`);
+    }
     this.emit(escrow.dealId, 'escrow_funded', { escrowId: id, status: 'Funded', txSignature });
     return { escrow: updated, txSignature };
   }
@@ -126,8 +154,13 @@ export class EscrowService {
       throw new BadRequestException(`Cannot release escrow in status: ${escrow.status}`);
     }
 
-    const buyer = new PublicKey(escrow.buyerAddress);
-    const seller = new PublicKey(escrow.sellerAddress);
+    const buyerAddress = this.getBuyerAddress(escrow);
+    const sellerAddress = this.getSellerAddress(escrow);
+    if (!buyerAddress || !sellerAddress) {
+      throw new BadRequestException('Escrow participants are missing buyer/seller wallet addresses.');
+    }
+    const buyer = new PublicKey(buyerAddress);
+    const seller = new PublicKey(sellerAddress);
     const releaseTx = await this.solana.buildRelease(escrow.dealIdHash!, buyer, seller);
     const serializedTx = releaseTx.serialize({ requireAllSignatures: false }).toString('base64');
 
@@ -148,8 +181,11 @@ export class EscrowService {
       data: { status: 'Released', txSignature },
     });
 
-    await this.notify(escrow.dealId, escrow.sellerAddress, 'PaymentReleased', 'Escrow released',
-      'Funds released to the seller.');
+    const sellerAddress = this.getSellerAddress(escrow);
+    if (sellerAddress) {
+      await this.notify(escrow.dealId, sellerAddress, 'PaymentReleased', 'Escrow released',
+        'Funds released to the seller.');
+    }
     this.emit(escrow.dealId, 'escrow_released', { escrowId: id, status: 'Released', txSignature });
     return { escrow: updated, txSignature };
   }
@@ -157,7 +193,10 @@ export class EscrowService {
   // ── Confirm terms (both buyer + seller must confirm) ───────
 
   async doConfirmTerms(dealId: string, walletAddress: string) {
-    const escrow = await this.prisma.escrow.findFirst({ where: { dealId } });
+    const escrow = await this.prisma.escrow.findFirst({
+      where: { dealId },
+      select: this.escrowBaseSelect,
+    });
     if (!escrow) throw new NotFoundException('Escrow not found for this deal');
     if (escrow.status !== 'Funded') {
       throw new BadRequestException(`Cannot confirm terms in status: ${escrow.status}`);
@@ -172,8 +211,8 @@ export class EscrowService {
     }
 
     // Determine role
-    const isBuyer = walletAddress === escrow.buyerAddress;
-    const isSeller = walletAddress === escrow.sellerAddress;
+    const isBuyer = walletAddress === this.getBuyerAddress(escrow);
+    const isSeller = walletAddress === this.getSellerAddress(escrow);
     if (!isBuyer && !isSeller) {
       throw new BadRequestException('Wallet is not a participant in this escrow');
     }
@@ -221,8 +260,8 @@ export class EscrowService {
 
   async doConfirmTermsDone(id: string, walletAddress: string, txSignature: string) {
     const escrow = await this.assertEscrow(id);
-    const isBuyer = walletAddress === escrow.buyerAddress;
-    const isSeller = walletAddress === escrow.sellerAddress;
+    const isBuyer = walletAddress === this.getBuyerAddress(escrow);
+    const isSeller = walletAddress === this.getSellerAddress(escrow);
     if (!isBuyer && !isSeller) {
       throw new BadRequestException('Wallet is not a participant');
     }
@@ -250,12 +289,15 @@ export class EscrowService {
   // ── Submit delivery (seller only) ──────────────────────────
 
   async doSubmitDelivery(dealId: string, walletAddress: string) {
-    const escrow = await this.prisma.escrow.findFirst({ where: { dealId } });
+    const escrow = await this.prisma.escrow.findFirst({
+      where: { dealId },
+      select: this.escrowBaseSelect,
+    });
     if (!escrow) throw new NotFoundException('Escrow not found for this deal');
     if (escrow.status !== 'Funded' && escrow.status !== 'TermsConfirmed') {
       throw new BadRequestException(`Cannot submit delivery in status: ${escrow.status}`);
     }
-    if (walletAddress !== escrow.sellerAddress) {
+    if (walletAddress !== this.getSellerAddress(escrow)) {
       throw new BadRequestException('Only seller can submit delivery');
     }
 
@@ -283,7 +325,11 @@ export class EscrowService {
       throw new BadRequestException(`Cannot refund escrow in status: ${escrow.status}`);
     }
 
-    const buyer = new PublicKey(escrow.buyerAddress);
+    const buyerAddress = this.getBuyerAddress(escrow);
+    if (!buyerAddress) {
+      throw new BadRequestException('Escrow buyer wallet address is missing.');
+    }
+    const buyer = new PublicKey(buyerAddress);
     const refundTx = await this.solana.buildRefund(escrow.dealIdHash!, buyer);
     const serializedTx = refundTx.serialize({ requireAllSignatures: false }).toString('base64');
 
@@ -311,9 +357,12 @@ export class EscrowService {
   // ── Queries ──────────────────────────────────────────────────────
 
   async getByDealId(dealId: string) {
-    const escrow = await this.prisma.escrow.findFirst({ where: { dealId } });
+    const escrow = await this.prisma.escrow.findFirst({
+      where: { dealId },
+      select: this.escrowBaseSelect,
+    });
     if (!escrow) throw new NotFoundException('Escrow not found for this deal');
-    return escrow;
+    return this.attachEscrowParticipantAddresses(escrow);
   }
 
   async getById(id: string) {
@@ -321,11 +370,37 @@ export class EscrowService {
   }
 
   async listByWallet(wallet: string) {
-    return this.prisma.escrow.findMany({
+    const escrows = await this.prisma.escrow.findMany({
       where: { deal: { participants: { some: { walletAddress: wallet } } } },
-      include: { deal: true },
+      select: {
+        ...this.escrowBaseSelect,
+        deal: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            type: true,
+            amount: true,
+            token: true,
+            status: true,
+            deadline: true,
+            version: true,
+            termsHash: true,
+            evidenceHash: true,
+            createdAt: true,
+            updatedAt: true,
+            participants: {
+              select: {
+                walletAddress: true,
+                role: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
+    return escrows.map((escrow) => this.attachEscrowParticipantAddresses(escrow));
   }
 
   async getOnChainState(dealId: string) {
@@ -337,9 +412,67 @@ export class EscrowService {
   // ── Helpers ──────────────────────────────────────────────────────
 
   private async assertEscrow(id: string) {
-    const escrow = await this.prisma.escrow.findUnique({ where: { id } });
+    const escrow = await this.prisma.escrow.findUnique({
+      where: { id },
+      select: this.escrowBaseSelect,
+    });
     if (!escrow) throw new NotFoundException('Escrow not found');
-    return escrow;
+    return this.attachEscrowParticipantAddresses(escrow);
+  }
+
+  private attachEscrowParticipantAddresses<
+    T extends {
+      buyerAddress?: string | null;
+      sellerAddress?: string | null;
+      deal: {
+        participants: Array<{ walletAddress: string; role: string }>;
+      };
+    },
+  >(escrow: T) {
+    const buyerAddress =
+      escrow.deal.participants.find((participant) => participant.role === 'buyer')?.walletAddress ??
+      null;
+    const sellerAddress =
+      escrow.deal.participants.find((participant) => participant.role === 'seller')?.walletAddress ??
+      null;
+
+    return {
+      ...escrow,
+      buyerAddress,
+      sellerAddress,
+    };
+  }
+
+  private getBuyerAddress(escrow: {
+    buyerAddress?: string | null;
+    deal?: { participants?: Array<{ walletAddress: string; role: string }> };
+  }) {
+    if (escrow.buyerAddress) {
+      return escrow.buyerAddress;
+    }
+    if ('deal' in escrow && escrow.deal?.participants) {
+      return (
+        escrow.deal.participants.find((participant) => participant.role === 'buyer')?.walletAddress ??
+        null
+      );
+    }
+    return null;
+  }
+
+  private getSellerAddress(escrow: {
+    sellerAddress?: string | null;
+    deal?: { participants?: Array<{ walletAddress: string; role: string }> };
+  }) {
+    if (escrow.sellerAddress) {
+      return escrow.sellerAddress;
+    }
+    if (escrow.deal?.participants) {
+      return (
+        escrow.deal.participants.find((participant) => participant.role === 'seller')?.walletAddress ??
+        null
+      );
+    }
+    return null;
   }
 
   private emit(dealId: string, event: string, payload: Record<string, unknown>) {

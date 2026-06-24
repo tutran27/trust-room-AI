@@ -11,6 +11,9 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.21
+      agora-extension-ai-denoiser:
+        specifier: ^2.0.2
+        version: 2.0.2(agora-rtc-sdk-ng@4.24.4)
       prettier:
         specifier: ^3.3.0
         version: 3.8.4
@@ -245,7 +248,7 @@ importers:
     dependencies:
       '@coral-xyz/anchor':
         specifier: ^0.30.1
-        version: 0.30.1(bufferutil@4.1.0)(typescript@5.9.3)
+        version: 0.30.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
       '@solana/web3.js':
         specifier: ^1.95.0
         version: 1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
@@ -1343,6 +1346,11 @@ packages:
   agentkeepalive@4.6.0:
     resolution: {integrity: sha512-kja8j7PjmncONqaTsB8fQ+wE2mSU2DJ9D4XKoJ5PFWIdRMa6SLSN1ff4mOr4jCbfRSsxR4keIiySJU0N9T5hIQ==}
     engines: {node: '>= 8.0.0'}
+
+  agora-extension-ai-denoiser@2.0.2:
+    resolution: {integrity: sha512-dm71tgSZajQ2Ha7AN7oRfsvxFnB2JNAUKYD/jc5pfiKrrnwctqowNNv0MqXsmJl98MFbo8M80x9Zg8h1No7VFA==}
+    peerDependencies:
+      agora-rtc-sdk-ng: '>=4.15.1'
 
   agora-rtc-sdk-ng@4.24.4:
     resolution: {integrity: sha512-rbD2cYAvuL+lLbquFQRDj49Ym8avj/zM6HE+dxTRqVZtq88hs7AFXJbrZPlRbuYXxfNQQGmiF6mZO+tFSH8wNg==}
@@ -2797,10 +2805,10 @@ snapshots:
 
   '@coral-xyz/anchor-errors@0.30.1': {}
 
-  '@coral-xyz/anchor@0.30.1(bufferutil@4.1.0)(typescript@5.9.3)':
+  '@coral-xyz/anchor@0.30.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)':
     dependencies:
       '@coral-xyz/anchor-errors': 0.30.1
-      '@coral-xyz/borsh': 0.30.1(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3))
+      '@coral-xyz/borsh': 0.30.1(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
       '@noble/hashes': 1.8.0
       '@solana/web3.js': 1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
       bn.js: 5.2.3
@@ -2820,7 +2828,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@coral-xyz/borsh@0.30.1(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3))':
+  '@coral-xyz/borsh@0.30.1(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))':
     dependencies:
       '@solana/web3.js': 1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
       bn.js: 5.2.3
@@ -3565,6 +3573,10 @@ snapshots:
   agentkeepalive@4.6.0:
     dependencies:
       humanize-ms: 1.2.1
+
+  agora-extension-ai-denoiser@2.0.2(agora-rtc-sdk-ng@4.24.4):
+    dependencies:
+      agora-rtc-sdk-ng: 4.24.4
 
   agora-rtc-sdk-ng@4.24.4:
     dependencies:

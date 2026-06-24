@@ -20,6 +20,7 @@ const WS_URL = (
 interface SocketState {
   socket: Socket | null;
   connected: boolean;
+  joinUser: (wallet: string) => void;
   joinDeal: (dealId: string, wallet?: string) => void;
   leaveDeal: (dealId: string) => void;
   joinMeeting: (meetingId: string, wallet?: string) => void;
@@ -39,26 +40,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [socket, setSocketState] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
 
-  useEffect(() => {
-    const socket = io(WS_URL, {
-      transports: ['websocket', 'polling'],
-      autoConnect: true,
-      reconnection: true,
-    });
-    socketRef.current = socket;
-    setSocketState(socket);
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
-    return () => {
-      socket.removeAllListeners();
-      socket.disconnect();
-      socketRef.current = null;
-      setSocketState(null);
-    };
+  // Track wallet for auto-rejoin on reconnect
+  const walletRef = useRef<string | null>(null);
+
+  const joinUser = useCallback((wallet: string) => {
+    walletRef.current = wallet;
+    socketRef.current?.emit('join_user', { wallet });
   }, []);
 
   const joinDeal = useCallback((dealId: string, wallet?: string) => {
-    socketRef.current?.emit('join_deal', { dealId, wallet });
+    if (wallet) walletRef.current = wallet;
+    socketRef.current?.emit('join_deal', { dealId, wallet: wallet ?? walletRef.current ?? undefined });
   }, []);
 
   const leaveDeal = useCallback((dealId: string) => {
@@ -66,7 +58,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const joinMeeting = useCallback((meetingId: string, wallet?: string) => {
-    socketRef.current?.emit('join_meeting', { meetingId, wallet });
+    if (wallet) walletRef.current = wallet;
+    socketRef.current?.emit('join_meeting', { meetingId, wallet: wallet ?? walletRef.current ?? undefined });
   }, []);
 
   const leaveMeeting = useCallback((meetingId: string) => {
@@ -80,9 +73,42 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  useEffect(() => {
+    const socket = io(WS_URL, {
+      transports: ['websocket', 'polling'],
+      autoConnect: true,
+      reconnection: true,
+    });
+    socketRef.current = socket;
+    setSocketState(socket);
+    socket.on('connect', () => {
+      setConnected(true);
+      // Auto-rejoin user room on reconnect if wallet was previously joined
+      if (walletRef.current) {
+        socket.emit('join_user', { wallet: walletRef.current });
+      }
+    });
+    socket.on('disconnect', () => setConnected(false));
+    return () => {
+      socket.removeAllListeners();
+      socket.disconnect();
+      socketRef.current = null;
+      setSocketState(null);
+    };
+  }, []);
+
   return (
     <SocketContext.Provider
-      value={{ socket, connected, joinDeal, leaveDeal, joinMeeting, leaveMeeting, sendChat }}
+      value={{
+        socket,
+        connected,
+        joinUser,
+        joinDeal,
+        leaveDeal,
+        joinMeeting,
+        leaveMeeting,
+        sendChat,
+      }}
     >
       {children}
     </SocketContext.Provider>

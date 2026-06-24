@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Deal, RiskEventLive } from '../lib/api-types';
 import { useSocket } from '../providers/socket-provider';
 
@@ -22,11 +22,26 @@ export interface LiveDealUpdate {
   txSignature?: string;
 }
 
+export interface MessageBlockedEvent {
+  dealId: string;
+  reason: string;
+  intents: string[];
+  level: string;
+}
+
+export interface DealErrorEvent {
+  dealId: string;
+  code: string;
+  message: string;
+}
+
 export function useDealRoom(deal: Deal | null | undefined, wallet: string | null | undefined) {
   const { socket, connected, joinDeal, leaveDeal, sendChat } = useSocket();
   const [messages, setMessages] = useState<LiveChatMessage[]>([]);
   const [riskEvents, setRiskEvents] = useState<RiskEventLive[]>([]);
   const [updates, setUpdates] = useState<LiveDealUpdate[]>([]);
+  const [blockedMessages, setBlockedMessages] = useState<MessageBlockedEvent[]>([]);
+  const [dealError, setDealError] = useState<DealErrorEvent | null>(null);
 
   useEffect(() => {
     if (!deal?.id || !socket) return;
@@ -48,14 +63,28 @@ export function useDealRoom(deal: Deal | null | undefined, wallet: string | null
       setUpdates((current) => [payload, ...current].slice(0, 20));
     };
 
+    const onMessageBlocked = (payload: MessageBlockedEvent) => {
+      if (payload.dealId !== deal.id) return;
+      setBlockedMessages((current) => [payload, ...current].slice(0, 20));
+    };
+
+    const onDealError = (payload: DealErrorEvent) => {
+      if (payload.dealId !== deal.id) return;
+      setDealError(payload);
+    };
+
     socket.on('chat_message', onChatMessage);
     socket.on('risk_detected', onRiskDetected);
     socket.on('deal_update', onDealUpdate);
+    socket.on('message_blocked', onMessageBlocked);
+    socket.on('deal_error', onDealError);
 
     return () => {
       socket.off('chat_message', onChatMessage);
       socket.off('risk_detected', onRiskDetected);
       socket.off('deal_update', onDealUpdate);
+      socket.off('message_blocked', onMessageBlocked);
+      socket.off('deal_error', onDealError);
       leaveDeal(deal.id);
     };
   }, [deal?.id, joinDeal, leaveDeal, socket, wallet]);
@@ -65,27 +94,28 @@ export function useDealRoom(deal: Deal | null | undefined, wallet: string | null
     return 'buyer';
   }, [deal?.sellerWallet, wallet]);
 
-  return {
-    connected,
-    messages,
-    riskEvents,
-    updates,
-    sendChatMessage: (message: string) => {
+  const sendChatMessage = useCallback(
+    (message: string) => {
       if (!deal?.id || !wallet) return;
+      // No optimistic update — the server validates sender/role and returns
+      // the authoritative broadcast or message_blocked event.
       sendChat({
         dealId: deal.id,
         message,
         sender: wallet,
         speakerRole: apiSuggestedRole,
       });
-      // Optimistic update — show message immediately without waiting for backend
-      setMessages((current) => [...current, {
-        dealId: deal.id!,
-        message,
-        sender: wallet!,
-        speakerRole: apiSuggestedRole,
-        timestamp: new Date().toISOString(),
-      }].slice(-100));
     },
+    [deal?.id, wallet, apiSuggestedRole, sendChat],
+  );
+
+  return {
+    connected,
+    messages,
+    riskEvents,
+    updates,
+    blockedMessages,
+    dealError,
+    sendChatMessage,
   };
 }

@@ -238,6 +238,7 @@ export class DealsService {
         );
       }
 
+      // Create seller participant
       await tx.dealParticipant.create({
         data: {
           dealId,
@@ -246,6 +247,7 @@ export class DealsService {
         },
       });
 
+      // Create deal event for invite
       await tx.dealEvent.create({
         data: {
           dealId,
@@ -264,7 +266,58 @@ export class DealsService {
       });
     });
 
+    // ── Post-transaction side-effects (best-effort) ──
+    // Notify the invited seller + emit realtime notification + deal_update
+    void this.afterInviteSeller(dealId, dto.sellerWallet, actorWallet, current.title);
+
     return this.serializeDeal(updated);
+  }
+
+  /**
+   * Best-effort side-effects after inviting a seller:
+   * 1. Create a DB notification for the seller
+   * 2. Emit realtime `notification` event to the seller's user room
+   * 3. Emit `deal_update` to the deal room so all participants see the change
+   */
+  private async afterInviteSeller(
+    dealId: string,
+    sellerWallet: string,
+    buyerWallet: string,
+    dealTitle: string,
+  ) {
+    // 1. Persist notification for the seller
+    try {
+      const n = await this.notifications.create(
+        sellerWallet,
+        'You have been invited to a deal',
+        `Buyer ${buyerWallet.slice(0, 6)}…${buyerWallet.slice(-4)} invited you to "${dealTitle}".`,
+        'DealInvite' as any,
+        dealId,
+      );
+
+      // 2. Emit realtime notification to the seller's user room
+      this.ws.emitNotification(sellerWallet, {
+        id: n.id,
+        type: 'DealInvite',
+        title: 'You have been invited to a deal',
+        message: `Buyer ${buyerWallet.slice(0, 6)}…${buyerWallet.slice(-4)} invited you to "${dealTitle}".`,
+        dealId,
+        createdAt: n.createdAt,
+      });
+    } catch {
+      /* best-effort */
+    }
+
+    // 3. Broadcast deal_update to the deal room
+    try {
+      this.ws.emitDealUpdate(dealId, {
+        kind: 'seller_invited',
+        sellerWallet,
+        dealTitle,
+      });
+    } catch {
+      /* best-effort */
+    }
   }
 
   async transition(dealId: string, dto: TransitionDealDto, actorWallet: string) {

@@ -1,12 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { Prisma, NotificationType } from '@trustroom/db';
 import { PrismaService } from '../database/prisma.service';
-import { NotificationType } from '@trustroom/db';
 
 @Injectable()
 export class NotificationsService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  async create(wallet: string, title: string, message: string, type: NotificationType, dealId?: string, metadata?: Record<string, unknown>) {
+  async create(wallet: string, title: string, message: string, type: NotificationType, dealId?: string, metadata?: Prisma.InputJsonValue) {
     return this.prisma.notification.create({
       data: {
         wallet,
@@ -14,7 +14,7 @@ export class NotificationsService {
         message,
         type,
         dealId,
-        metadata: metadata ? JSON.stringify(metadata) : undefined,
+        metadata: metadata ?? undefined,
       },
     });
   }

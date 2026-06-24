@@ -65,6 +65,7 @@ export function MeetingRtcPanel({
 
   const localVideoRef = useRef<HTMLDivElement | null>(null);
   const remoteVideoRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const autoJoinRequestRef = useRef<string | null>(null);
 
   const isActive = activeMeetingId === meetingId;
   const canToggleMic = Boolean(getLocalAudioTrack());
@@ -75,18 +76,39 @@ export function MeetingRtcPanel({
   const readyForRtc = Boolean(appId && walletAddress && token && token.trim().length > 0 && !tokenLoading);
 
   useEffect(() => {
-    if (readyForRtc && !isActive && status !== 'connecting') {
-      join({
-        meetingId,
-        appId: appId!,
-        token: token!,
-        uid,
-        sttPusherUid,
-        onTranscript: onRealtimeTranscript,
-        onTransportState: onRealtimeTransportStateChange,
-      });
+    const joinKey = readyForRtc ? `${meetingId}:${uid}:${token}` : null;
+
+    if (!readyForRtc) {
+      autoJoinRequestRef.current = null;
+      return;
     }
+
+    if (isActive || status === 'connecting') {
+      return;
+    }
+
+    if (autoJoinRequestRef.current === joinKey) {
+      return;
+    }
+
+    autoJoinRequestRef.current = joinKey;
+
+    void join({
+      meetingId,
+      appId: appId!,
+      token: token!,
+      uid,
+      sttPusherUid,
+      onTranscript: onRealtimeTranscript,
+      onTransportState: onRealtimeTransportStateChange,
+    });
   }, [readyForRtc, isActive, status, meetingId, appId, token, uid, sttPusherUid, join, onRealtimeTranscript, onRealtimeTransportStateChange]);
+
+  useEffect(() => {
+    if (status === 'connected' || status === 'idle' || status === 'error') {
+      autoJoinRequestRef.current = null;
+    }
+  }, [status]);
 
   // Play local video when connected
   useEffect(() => {
