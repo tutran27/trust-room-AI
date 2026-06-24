@@ -344,4 +344,34 @@ export class WebsocketGateway
       timestamp: new Date().toISOString(),
     });
   }
+
+  /**
+   * Emit TTS audio frame to a meeting room.
+   * Each frame is a base64-encoded PCM int16 chunk at 24kHz mono.
+   */
+  emitMeetingTtsAudio(meetingId: string, frame: Record<string, unknown>) {
+    this.server.to(`meeting:${meetingId}`).emit('meeting_tts_audio', {
+      meetingId,
+      frame,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /** Emit TTS sentence marker (for UI subtitles) */
+  emitMeetingTtsSentence(meetingId: string, sentence: Record<string, unknown>) {
+    this.server.to(`meeting:${meetingId}`).emit('meeting_tts_sentence', {
+      meetingId,
+      sentence,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /** Emit TTS done signal */
+  emitMeetingTtsDone(meetingId: string, done: Record<string, unknown>) {
+    this.server.to(`meeting:${meetingId}`).emit('meeting_tts_done', {
+      meetingId,
+      done,
+      timestamp: new Date().toISOString(),
+    });
+  }
 }

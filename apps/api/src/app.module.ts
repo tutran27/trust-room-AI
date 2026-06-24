@@ -14,6 +14,7 @@ import { AgoraModule } from './agora/agora.module';
 import { AiModule } from './ai/ai.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { MeetingsModule } from './meetings/meetings.module';
+import { AiVoiceModule } from './ai-voice/ai-voice.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { MeetingsModule } from './meetings/meetings.module';
     AiModule,
     WebsocketModule,
     MeetingsModule,
+    AiVoiceModule,
   ],
 })
 export class AppModule {}

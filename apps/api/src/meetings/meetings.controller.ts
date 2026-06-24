@@ -8,8 +8,11 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../common/authenticated-request';
 import { MeetingsService } from './meetings.service';
@@ -128,5 +131,14 @@ export class MeetingsController {
   @Post(':id/stt/stop')
   stopStt(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.meetings.stopSttAgent(id, req.user.wallet);
+  }
+
+  @Post(':id/stt/groq-transcribe')
+  @UseInterceptors(FileInterceptor('audio'))
+  groqTranscribe(
+    @Param('id') id: string,
+    @UploadedFile() audio: Express.Multer.File,
+  ) {
+    return this.meetings.groqTranscribe(id, audio);
   }
 }

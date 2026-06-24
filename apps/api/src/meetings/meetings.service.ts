@@ -872,6 +872,117 @@ export class MeetingsService {
     };
   }
 
+  // ─── Groq Whisper STT ──────────────────────────────────────────────────
+
+  async groqTranscribe(sessionId: string, audio: Express.Multer.File) {
+    const session = await this.prisma.meetingSession.findUnique({
+      where: { id: sessionId },
+      select: { id: true },
+    });
+    if (!session) {
+      throw new NotFoundException('Meeting session not found');
+    }
+
+    const groqApiKey =
+      this.configService.get<string>('GROQ_API_KEY') ?? process.env.GROQ_API_KEY;
+    if (!groqApiKey) {
+      throw new BadRequestException('GROQ_API_KEY is not configured on the API server.');
+    }
+
+    // Validate the audio file
+    if (!audio || !audio.buffer || audio.buffer.length === 0) {
+      throw new BadRequestException('Audio file is required.');
+    }
+
+    const maxSize = 2 * 1024 * 1024; // 2 MB
+    if (audio.buffer.length > maxSize) {
+      throw new BadRequestException('Audio file exceeds 2 MB limit.');
+    }
+
+    try {
+      const fileExt = audio.originalname?.split('.').pop()
+        ?? (audio.mimetype?.includes('ogg') ? 'ogg'
+          : audio.mimetype?.includes('mp4') ? 'm4a'
+          : 'webm');
+      const fileName = `audio.${fileExt}`;
+      const file = new Blob([audio.buffer], { type: audio.mimetype || 'audio/webm' });
+
+      const formData = new FormData();
+      formData.append('file', file, fileName);
+      formData.append('model', 'whisper-large-v3-turbo');
+      formData.append('response_format', 'json');
+      formData.append('language', 'vi');
+
+      const MAX_RETRIES = 5;
+      let lastError: Error | null = null;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          // Exponential backoff: 1s, 2s, 4s, 8s, 16s (capped at 30s)
+          const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 30_000);
+          this.logger.warn(
+            `Groq Whisper retry ${attempt}/${MAX_RETRIES} in ${delayMs}ms (rate limited)...`,
+          );
+          await this.wait(delayMs);
+        }
+
+        const response = await fetch(
+          'https://api.groq.com/openai/v1/audio/transcriptions',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${groqApiKey}`,
+            },
+            body: formData,
+          },
+        );
+
+        if (response.ok) {
+          const result = (await response.json()) as { text?: string };
+          const text = (result.text ?? '').trim();
+
+          if (!text) {
+            return { text: '', language: 'vi', confidence: 0 };
+          }
+          return {
+            text,
+            language: 'vi',
+            confidence: 0.95,
+          };
+        }
+
+        // Rate limited (429) — retry with backoff
+        if (response.status === 429 && attempt < MAX_RETRIES) {
+          const errorText = await response.text();
+          this.logger.warn(
+            `Groq Whisper rate limited (429), attempt ${attempt + 1}/${MAX_RETRIES}: ${errorText}`,
+          );
+          lastError = new InternalServerErrorException(
+            'Speech-to-text request failed: rate limited. Retrying...',
+          );
+          continue;
+        }
+
+        // Non-retryable error
+        const errorText = await response.text();
+        this.logger.error(`Groq Whisper API error: ${response.status} ${errorText}`);
+        throw new InternalServerErrorException(
+          `Speech-to-text request failed: ${response.statusText}`,
+        );
+      }
+
+      // All retries exhausted
+      throw lastError ?? new InternalServerErrorException('Speech-to-text failed after retries.');
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.error(
+        'Groq Whisper transcription failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new InternalServerErrorException('Speech-to-text transcription failed.');
+    }
+  }
+
   private buildDemoSttState(fallbackReason: string | null = null): MeetingSttState {
     return {
       enabled: true,

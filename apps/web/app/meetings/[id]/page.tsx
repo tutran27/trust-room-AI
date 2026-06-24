@@ -34,6 +34,8 @@ import {
   useStopMeetingStt,
 } from '../../../hooks/use-api';
 import { type AgoraRealtimeTranscriptChunk } from '../../../lib/agora-stt';
+import { GroqSttClient } from '../../../lib/groq-stt';
+import { useRealtimeTts, type TtsSpeakerMode } from '../../../hooks/use-realtime-tts';
 import { formatRelativeTime } from '../../../lib/format';
 import { shortAddress } from '../../../lib/wallet';
 import { useAuth } from '../../../providers/auth-provider';
@@ -116,18 +118,12 @@ function groupRealtimeEntries(entries: RealtimeEntry[]) {
 const STT_LANGUAGE_OPTIONS = [
   { label: 'Tiếng Việt', value: 'vi-VN' },
   { label: 'English', value: 'en-US' },
-  { label: '中文', value: 'zh-CN' },
-  { label: '日本語', value: 'ja-JP' },
-  { label: '한국어', value: 'ko-KR' },
 ];
 
 const STT_TARGET_LANGUAGE_OPTIONS = [
   { label: 'Không dịch', value: '' },
   { label: 'Dịch sang Tiếng Việt', value: 'vi-VN' },
   { label: 'Dịch sang English', value: 'en-US' },
-  { label: 'Dịch sang 中文', value: 'zh-CN' },
-  { label: 'Dịch sang 日本語', value: 'ja-JP' },
-  { label: 'Dịch sang 한국어', value: 'ko-KR' },
 ];
 
 function riskVariant(severity?: string) {
@@ -208,20 +204,23 @@ export default function MeetingDetailPage() {
   const startSttMutation = useStartMeetingStt(meetingId ?? '');
   const stopSttMutation = useStopMeetingStt(meetingId ?? '');
 
-  const agoraUid = useMemo(() => {
+  const [agoraUid, setAgoraUid] = useState(0);
+
+  // Chỉ generate UID trên client (tránh hydration error)
+  useEffect(() => {
     const base = address ?? 'guest';
     let hash = 0;
     for (let index = 0; index < base.length; index += 1) {
       hash = (hash * 31 + base.charCodeAt(index)) >>> 0;
     }
-    const salt = typeof window !== 'undefined'
-      ? parseInt(sessionStorage.getItem('agora_uid_salt') ?? '0', 10) || (() => {
-          const s = Math.floor(Math.random() * 900_000) + 100_000;
-          sessionStorage.setItem('agora_uid_salt', String(s));
-          return s;
-        })()
-      : 0;
-    return ((hash + salt) % 900_000) + 1000;
+    const stored = sessionStorage.getItem('agora_uid_salt');
+    const salt = stored
+      ? parseInt(stored, 10)
+      : Math.floor(Math.random() * 900_000) + 100_000;
+    if (!stored) {
+      try { sessionStorage.setItem('agora_uid_salt', String(salt)); } catch {}
+    }
+    setAgoraUid(((hash + salt) % 900_000) + 1000);
   }, [address]);
 
   const tokenQuery = useAgoraToken(
@@ -277,15 +276,14 @@ export default function MeetingDetailPage() {
     [transcripts],
   );
   const lastTranscript = transcripts.length ? transcripts[transcripts.length - 1] : null;
-  const isDemoTranscriptMode = sttState?.mode === 'demo_manual' || !sttState;
-  const isRealtimeRunning = ['running', 'fallback_asr_only'].includes(sttState?.status ?? '');
-  const transcriptStatusLabel = startSttMutation.isPending
-    ? 'starting'
-    : isRealtimeRunning
-      ? 'on'
-      : 'off';
-  const startRealtimeDisabled =
-    startSttMutation.isPending || !meetingId || isRealtimeRunning;
+  const [realtimeOn, setRealtimeOn] = useState(false);
+  const [groqSttActive, setGroqSttActive] = useState(false);
+  const groqSttRef = useRef<GroqSttClient | null>(null);
+  const groqCounterRef = useRef(0);
+  const isDemoTranscriptMode = (!sttState || sttState?.mode === 'demo_manual') && !realtimeOn;
+  const transcriptStatusLabel = startSttMutation.isPending ? 'starting' : realtimeOn ? 'on' : 'off';
+  const startRealtimeDisabled = startSttMutation.isPending || realtimeOn;
+  const tts = useRealtimeTts(socket, meetingId, currentParticipant?.role ?? null);
 
   useEffect(() => {
     if (!address) return;
@@ -471,6 +469,112 @@ export default function MeetingDetailPage() {
     }
   }
 
+  /** Check if new text is too similar to the last Groq transcript (dedup) */
+  function isGroqDup(newText: string): boolean {
+    const entries = realtimeEntries.filter(e => e.id.startsWith('groq:'));
+    if (entries.length === 0) return false;
+    const last = entries[entries.length - 1];
+    if (!last) return false;
+    const a = last.text.trim().toLowerCase();
+    const b = newText.trim().toLowerCase();
+    if (a === b) return true;
+    // Tính độ dài overlap
+    const shorter = a.length < b.length ? a : b;
+    const longer = a.length < b.length ? b : a;
+    // Nếu text ngắn nằm trong text dài hoặc overlap > 70%
+    if (longer.includes(shorter)) return true;
+    const intersection = [...shorter].filter((c, i) => c === longer[i]).length;
+    return intersection / shorter.length > 0.7;
+  }
+
+  function handleGroqTranscript(sessionId: string, text: string) {
+    if (!meetingId || sessionId !== meetingId) return;
+    if (isGroqDup(text)) return;
+    const speaker = speakerLabel.trim() || shortAddress(address, 6, 6);
+    groqCounterRef.current += 1;
+    const chunkId = `groq:${groqCounterRef.current}`;
+    const now = Date.now();
+
+    setRealtimeEntries((current) => {
+      const next = current.filter((entry) => entry.id !== chunkId);
+      next.push({
+        id: chunkId,
+        speakerLabel: speaker,
+        text,
+        language: 'vi',
+        translatedText: null,
+        targetLanguage: null,
+        startTime: null,
+        endTime: null,
+        isFinal: true,
+        updatedAt: now,
+      });
+      return next.sort((left, right) => left.updatedAt - right.updatedAt);
+    });
+
+    setRealtimeTransportState('receiving');
+    setRealtimeNotice('Đang nhận transcript từ Groq Whisper.');
+
+    const persistText = async () => {
+      if (persistedChunkIdsRef.current.has(chunkId)) return;
+      persistedChunkIdsRef.current.add(chunkId);
+      const lastTs = lastTranscript?.endTime ?? lastTranscript?.startTime ?? 0;
+      try {
+        await addTranscriptMutation.mutateAsync({
+          participantId: currentParticipant?.id,
+          speakerLabel: speaker,
+          content: text,
+          language: 'vi',
+          startTime: lastTs,
+          endTime: lastTs + 2,
+          confidence: 0.95,
+        });
+      } catch (error) {
+        persistedChunkIdsRef.current.delete(chunkId);
+        setRealtimeNotice(error instanceof Error ? error.message : 'Lỗi lưu transcript');
+      }
+    };
+    void persistText();
+
+    // Auto TTS: gọi trực tiếp hook (không chờ socket)
+    if (tts.enabled) {
+      const role = currentParticipant?.role ?? null;
+      if (tts.speakerMode === 'all' || tts.speakerMode === role || !role) {
+        tts.speakText(text, speaker).catch(() => {});
+      }
+    }
+  }
+
+  async function handleStartGroqStt() {
+    if (!meetingId) return;
+    try {
+      const client = new GroqSttClient();
+      groqSttRef.current = client;
+      setGroqSttActive(true);
+      setRealtimeTransportState('waiting');
+      setRealtimeNotice('Groq Whisper đang khởi động...');
+      await client.start({
+        meetingId,
+        speakerLabel: speakerLabel.trim() || shortAddress(address, 6, 6),
+        language: 'vi',
+        onTranscript: handleGroqTranscript,
+        onError: (error) => setRealtimeNotice(`Groq lỗi: ${error.message}`),
+      });
+      setRealtimeNotice('Groq Whisper đang chạy.');
+    } catch (error) {
+      setGroqSttActive(false);
+      setRealtimeNotice(error instanceof Error ? error.message : 'Không bật được Groq');
+    }
+  }
+
+  function handleStopGroqStt() {
+    groqSttRef.current?.stop();
+    groqSttRef.current = null;
+    setGroqSttActive(false);
+    setRealtimeEntries([]);
+    setRealtimeNotice('Groq STT đã tắt.');
+  }
+
   function handleRealtimeTransportStateChange(state: {
     status: string;
     detail?: string;
@@ -501,12 +605,17 @@ export default function MeetingDetailPage() {
 
     try {
       setRealtimeTransportState('waiting');
+      // Chỉ gửi đúng 1 ngôn ngữ đã chọn (vi-VN hoặc en-US)
+      const detectLanguages = languages.filter(Boolean).slice(0, 1);
+      const hasTranslation = targetLanguages.length > 0;
       const result = await startSttMutation.mutateAsync({
-        languages,
+        languages: detectLanguages,
         targetLanguages,
-        enableTranslation: targetLanguages.length > 0,
+        enableTranslation: hasTranslation,
         maxIdleTime: 300,
       });
+
+      setRealtimeOn(true);
 
       if (result.fallbackReason) {
         setRealtimeNotice(result.fallbackReason);
@@ -528,6 +637,7 @@ export default function MeetingDetailPage() {
 
   async function handleStopRealtime() {
     await stopSttMutation.mutateAsync();
+    setRealtimeOn(false);
     setRealtimeEntries([]);
     setRealtimeNotice('Realtime transcript đã được tắt.');
   }
@@ -745,6 +855,56 @@ export default function MeetingDetailPage() {
                       >
                         Tắt
                       </Button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 mt-3">
+                      <span className="text-xs font-medium text-slate-400 uppercase tracking-wider mr-2">
+                        Groq Whisper:
+                      </span>
+                      <Button
+                        variant={groqSttActive ? 'primary' : 'ghost'}
+                        onClick={() => void handleStartGroqStt()}
+                        disabled={groqSttActive || !meetingId}
+                      >
+                        {groqSttActive ? 'Groq đang chạy' : 'Groq STT'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={handleStopGroqStt}
+                        disabled={!groqSttActive}
+                      >
+                        Tắt
+                      </Button>
+                    </div>
+                    {/* ── AI Voice (TTS) toggle ── */}
+                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 mt-3">
+                      <span className="text-xs font-medium text-slate-400 uppercase tracking-wider mr-2">
+                        AI Voice:
+                      </span>
+                      <Button
+                        variant={tts.enabled ? 'primary' : 'ghost'}
+                        onClick={() => tts.setEnabled(!tts.enabled)}
+                      >
+                        {tts.enabled ? '🔊 Đang đọc' : '🔇 TTS tắt'}
+                      </Button>
+                      {tts.enabled && (
+                        <>
+                          <div className="min-w-[120px]">
+                            <Select
+                              value={tts.speakerMode}
+                              onChange={(e) => tts.setSpeakerMode(e.target.value as TtsSpeakerMode)}
+                              options={[
+                                { label: 'All speakers', value: 'all' },
+                                { label: 'Buyer only', value: 'buyer' },
+                                { label: 'Seller only', value: 'seller' },
+                                { label: 'AI only', value: 'ai' },
+                              ]}
+                            />
+                          </div>
+                          <Badge variant={tts.speaking ? 'success' : 'muted'}>
+                            {tts.speaking ? 'speaking' : 'idle'}
+                          </Badge>
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
