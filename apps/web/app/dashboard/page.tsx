@@ -94,7 +94,9 @@ export default function DashboardPage() {
               </p>
               <div className="flex items-center gap-3 mt-5">
                 <Link href="/deals/new">
-                  <Button className="bg-white text-brand-900 hover:bg-white/95 border-2 border-brand-800/20 shadow-lg shadow-brand-900/20 font-semibold">
+                  <Button
+                    className="bg-sky-950/95 text-white shadow-lg shadow-sky-950/35 hover:bg-sky-900 hover:text-white focus:ring-cyan-200/30 focus:ring-offset-0"
+                  >
                     <Plus className="w-4 h-4 mr-1.5" />
                     New Deal
                   </Button>
