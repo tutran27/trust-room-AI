@@ -55,6 +55,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
     }
 
+    if (exception instanceof Prisma.PrismaClientInitializationError) {
+      return {
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+        code: 'DATABASE_UNAVAILABLE',
+        message: this.mapPrismaInitializationMessage(exception.message),
+        requestId,
+      };
+    }
+
     if (exception instanceof BadRequestException) {
       const response = exception.getResponse();
       if (typeof response === 'object' && response !== null) {
@@ -128,5 +137,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       default:
         return 'REQUEST_FAILED';
     }
+  }
+
+  private mapPrismaInitializationMessage(message: string): string {
+    if (message.includes("Can't reach database server")) {
+      return 'Database server is unavailable. Please make sure PostgreSQL is running and DATABASE_URL points to the correct host.';
+    }
+
+    if (message.includes('Authentication failed')) {
+      return 'Database authentication failed. Please verify DATABASE_URL credentials.';
+    }
+
+    return 'Database initialization failed. Please verify DATABASE_URL and database availability.';
   }
 }
