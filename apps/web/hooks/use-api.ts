@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '../lib/api-client';
+import { apiFetch, getToken, API_BASE } from '../lib/api-client';
 import type {
   AgoraTokenResult,
   Deal,
@@ -17,6 +17,7 @@ import type {
   NotificationRecord,
   Paginated,
   ReputationRecord,
+  TermFile,
 } from '../lib/api-types';
 
 // ── Deals ──────────────────────────────────────────────
@@ -222,6 +223,54 @@ export function useSubmitDelivery() {
         body: { txSignature },
       }),
     onSuccess: (res) => qc.invalidateQueries({ queryKey: ['escrow', res.escrow.dealId] }),
+  });
+}
+
+// ── Terms / Contract Files ─────────────────────────────
+export function useUploadTermFile(dealId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const token = getToken();
+      const res = await fetch(
+        `${API_BASE}/deals/${dealId}/terms/upload`,
+        {
+          method: 'POST',
+          headers: token ? { authorization: `Bearer ${token}` } : {},
+          body: formData,
+        },
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || err.error?.message || 'Upload failed');
+      }
+      return res.json() as Promise<TermFile>;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['term-files', dealId] });
+    },
+  });
+}
+
+export function useTermFiles(dealId: string | null) {
+  return useQuery({
+    queryKey: ['term-files', dealId],
+    queryFn: () => apiFetch<TermFile[]>(`/deals/${dealId}/terms`),
+    enabled: Boolean(dealId),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useDeleteTermFile(dealId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (fileId: string) =>
+      apiFetch<{ success: boolean }>(`/deals/${dealId}/terms/${fileId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['term-files', dealId] });
+    },
   });
 }
 

@@ -30,6 +30,9 @@ import {
   useReleaseEscrow,
   useTransitionDeal,
   useUpdateDeal,
+  useTermFiles,
+  useUploadTermFile,
+  useDeleteTermFile,
 } from '../../../hooks/use-api';
 import { signAndSendTx, isPhantomInstalled } from '../../../lib/solana';
 import { useDealRoom } from '../../../hooks/use-deal-room';
@@ -134,10 +137,10 @@ function escrowStepIndex(status?: string): number {
   switch (status) {
     case 'Created': return 0;
     case 'Funded': return 1;
-    case 'TermsConfirmed': return 2;
-    case 'DeliverySubmitted': return 3;
-    case 'Released': return 4;
-    case 'Refunded': return 4;
+    case 'TermsConfirmed': return 3;
+    case 'DeliverySubmitted': return 4;
+    case 'Released': return 5;
+    case 'Refunded': return 5;
     default: return 0;
   }
 }
@@ -145,9 +148,10 @@ function escrowStepIndex(status?: string): number {
 const ESCROW_STEPS = [
   { label: 'Created', description: 'Escrow deployed' },
   { label: 'Funded', description: 'SOL deposited' },
-  { label: 'Terms', description: 'Both agree' },
+  { label: 'Upload Terms', description: 'Seller uploads contract' },
+  { label: 'Confirm', description: 'Both parties agree' },
   { label: 'Delivery', description: 'Seller submits' },
-  { label: 'Released', description: 'Funds released' },
+  { label: 'Release', description: 'Funds released' },
 ];
 
 export default function DealDetailPage() {
@@ -167,6 +171,9 @@ export default function DealDetailPage() {
   const createMeeting = useCreateMeeting();
   const deleteDeal = useDeleteDeal(dealId ?? '');
   const meetingsQuery = useMeetingsByDeal(dealId, Boolean(dealId && address));
+  const termFilesQuery = useTermFiles(dealId);
+  const uploadTermFile = useUploadTermFile(dealId ?? '');
+  const deleteTermFile = useDeleteTermFile(dealId ?? '');
   const fundEscrow = useFundEscrow();
   const releaseEscrow = useReleaseEscrow();
   const refundEscrow = useRefundEscrow();
@@ -182,6 +189,7 @@ export default function DealDetailPage() {
   );
   const [editDescription, setEditDescription] = useState('');
   const [evidenceContent, setEvidenceContent] = useState('Screenshot / transcript evidence');
+  const [termsUploadError, setTermsUploadError] = useState<string | null>(null);
   const [escrowLoading, setEscrowLoading] = useState<string | null>(null);
   const [escrowError, setEscrowError] = useState<string | null>(null);
   const getUnsignedTx = useGetUnsignedTx();
@@ -763,6 +771,90 @@ export default function DealDetailPage() {
                       )}
                     </div>
 
+                    {/* Terms / Contract Files */}
+                    {(escrow.status === 'Funded' || escrow.status === 'TermsConfirmed') && (
+                      <div className="rounded-xl bg-surface-50 border border-surface-200 p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-primary-500" />
+                          <p className="text-sm font-semibold text-surface-900">Terms & Contract</p>
+                        </div>
+
+                        {/* List uploaded files */}
+                        {termFilesQuery.data && termFilesQuery.data.length > 0 && (
+                          <div className="space-y-2">
+                            {termFilesQuery.data.map((f) => (
+                              <div key={f.id} className="flex items-center justify-between rounded-lg bg-surface-50 border border-surface-200 p-2.5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <FileText className="h-4 w-4 text-surface-400 shrink-0" />
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium text-surface-800 truncate">{f.originalName}</p>
+                                    <p className="text-xs text-surface-400">{(f.fileSize / 1024).toFixed(1)} KB · {f.mimeType}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <a
+                                    href={`/api/deals/${dealId}/terms/${f.id}/download`}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    Download
+                                  </a>
+                                  {address === f.uploadedBy && (
+                                    <button
+                                      onClick={() => deleteTermFile.mutate(f.id)}
+                                      className="p-1.5 text-xs text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
+                                      title="Delete file"
+                                    >
+                                      <span className="text-lg leading-none">&times;</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Upload form — seller only */}
+                        {address === escrow.sellerAddress && (
+                          <div>
+                            <label className="flex flex-col items-center justify-center border-2 border-dashed border-surface-300 rounded-xl p-4 cursor-pointer hover:border-primary-400 hover:bg-primary-50/30 transition-all">
+                              <FileText className="h-6 w-6 text-surface-400 mb-1" />
+                              <p className="text-sm font-medium text-surface-600">Upload terms / contract file</p>
+                              <p className="text-xs text-surface-400 mt-0.5">PDF, DOCX, images — max 10 MB</p>
+                              <input
+                                type="file"
+                                className="hidden"
+                                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.txt"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  setTermsUploadError(null);
+                                  try {
+                                    await uploadTermFile.mutateAsync(file);
+                                  } catch (err) {
+                                    setTermsUploadError(err instanceof Error ? err.message : 'Upload failed');
+                                  }
+                                  e.target.value = '';
+                                }}
+                                disabled={uploadTermFile.isPending}
+                              />
+                            </label>
+                            {uploadTermFile.isPending && (
+                              <p className="text-xs text-primary-600 mt-1.5 text-center">Uploading...</p>
+                            )}
+                            {termsUploadError && (
+                              <p className="text-xs text-danger-600 mt-1.5">{termsUploadError}</p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Buyer notice when files exist but none uploaded */}
+                        {address === escrow.buyerAddress && termFilesQuery.data && termFilesQuery.data.length === 0 && (
+                          <p className="text-xs text-surface-400 text-center py-2">Waiting for seller to upload terms...</p>
+                        )}
+                      </div>
+                    )}
+
                     {/* Escrow Actions */}
                     <div className="space-y-2.5">
                       {escrow.status === 'Created' && address === escrow.buyerAddress && (
@@ -810,7 +902,7 @@ export default function DealDetailPage() {
                                   setEscrowLoading(null);
                                 }
                               }}
-                              disabled={escrowLoading !== null}
+                              disabled={escrowLoading !== null || !termFilesQuery.data?.length}
                             >
                               <CheckCircle2 className="h-4 w-4 mr-1.5" />
                               {escrowLoading === 'confirm-terms' ? 'Signing...' : 'Buyer: Confirm Terms'}
@@ -836,7 +928,7 @@ export default function DealDetailPage() {
                                   setEscrowLoading(null);
                                 }
                               }}
-                              disabled={escrowLoading !== null}
+                              disabled={escrowLoading !== null || !termFilesQuery.data?.length}
                             >
                               <CheckCircle2 className="h-4 w-4 mr-1.5" />
                               {escrowLoading === 'confirm-terms' ? 'Signing...' : 'Seller: Confirm Terms'}

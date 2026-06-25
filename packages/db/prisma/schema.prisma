@@ -104,6 +104,7 @@ model Deal {
   escrow       Escrow?
   disputes     Dispute[]
   meetings     MeetingSession[]
+  termFiles    DealTermFile[]
 
   @@index([status])
   @@index([updatedAt, id])
@@ -220,6 +221,26 @@ model Evidence {
   @@index([disputeId])
 }
 
+// ─── Deal Term Files (uploaded by seller) ──────────────────────────
+
+model DealTermFile {
+  id          String   @id @default(cuid())
+  dealId      String
+  uploadedBy  String
+  fileName    String
+  originalName String
+  mimeType    String
+  fileSize    Int
+  sha256Hash  String   @unique
+  filePath    String   // local storage path (in production: Supabase URL)
+  storageType String   @default("local") // "local" | "supabase"
+  createdAt   DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+}
+
 // ─── Notifications ───────────────────────────────────────────────────
 
 enum NotificationType {
@@ -230,6 +251,7 @@ enum NotificationType {
   PaymentReceived
   PaymentReleased
   EvidenceUploaded
+  TermsUploaded
   AiAlert
   SystemMessage
 }

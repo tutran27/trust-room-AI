@@ -163,6 +163,14 @@ export class EscrowService {
       throw new BadRequestException(`Cannot confirm terms in status: ${escrow.status}`);
     }
 
+    // Require at least one term file to be uploaded before confirming terms
+    const termFiles = await this.prisma.dealTermFile.findMany({ where: { dealId } });
+    if (termFiles.length === 0) {
+      throw new BadRequestException(
+        'Seller must upload a terms/contract file before confirming terms.',
+      );
+    }
+
     // Determine role
     const isBuyer = walletAddress === escrow.buyerAddress;
     const isSeller = walletAddress === escrow.sellerAddress;

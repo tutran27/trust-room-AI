@@ -15,6 +15,7 @@ import { AiModule } from './ai/ai.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { AiVoiceModule } from './ai-voice/ai-voice.module';
+import { TermsModule } from './terms/terms.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AiVoiceModule } from './ai-voice/ai-voice.module';
     WebsocketModule,
     MeetingsModule,
     AiVoiceModule,
+    TermsModule,
   ],
 })
 export class AppModule {}

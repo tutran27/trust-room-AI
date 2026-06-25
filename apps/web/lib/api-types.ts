@@ -234,6 +234,17 @@ export interface NonceResult {
   expiresAt: string;
 }
 
+/** Term file uploaded by seller as contract/terms document */
+export interface TermFile {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  fileSize: number;
+  sha256Hash: string;
+  uploadedBy: string;
+  createdAt: string;
+}
+
 // Realtime risk event broadcast by the Scam Guard over the deal-room socket.
 export interface RiskEventLive {
   dealId: string;
