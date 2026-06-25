@@ -170,6 +170,119 @@ pnpm test           # Chạy tests
 - **AI**: Groq API (LLM), Qdrant (vector DB), bge-m3 (embeddings)
 - **Realtime**: Agora Web RTC, Socket.IO
 
+## Deploy lên VPS
+
+Dự án chạy tốt trên **VPS 3GB RAM** (dư tài nguyên). Stack: Docker (PostgreSQL + Redis) + PM2 + Nginx.
+
+### Yêu cầu VPS
+
+- Ubuntu 22.04 / 24.04 hoặc Debian 12
+- RAM tối thiểu: **2GB** (khuyên dùng: 3GB+)
+- Docker + Docker Compose (script tự cài)
+- Domain trỏ về IP VPS (tùy chọn, có thể dùng IP)
+
+### Cách 1: Script tự động (khuyên dùng)
+
+SSH vào VPS và chạy một lệnh duy nhất:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tutran27/trust-room-AI/main/scripts/deploy-vps.sh | bash
+```
+
+Script sẽ tự động:
+1. Cài Docker, Node.js 22, pnpm, PM2
+2. Clone project
+3. Tạo file `.env` (JWT secret random)
+4. Khởi động PostgreSQL + Redis (Docker)
+5. Cài dependencies + Prisma generate + push schema
+6. Build web + api
+7. Cấu hình Nginx reverse proxy
+8. Start services với PM2 (tự động restart nếu crash)
+
+Sau khi script chạy xong:
+
+```bash
+# 1. Sửa API key
+nano ~/trustroom-ai/.env
+# Điền: GROQ_API_KEY, AGORA_APP_ID, AGORA_APP_CERTIFICATE, SUPABASE_URL, SUPABASE_ANON_KEY
+
+# 2. Restart để áp dụng
+pm2 restart all
+
+# 3. Kiểm tra
+pm2 status
+curl http://localhost:4000/api/health
+```
+
+### Cách 2: Từng bước thủ công
+
+```bash
+# SSH vào VPS
+# Cài Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Logout rồi login lại
+
+# Cài Node.js 22 + pnpm
+npm install -g pnpm pm2
+
+# Clone project
+git clone https://github.com/tutran27/trust-room-AI.git ~/trustroom-ai
+cd ~/trustroom-ai
+
+# Env
+cp .env.example .env
+# Sửa JWT_SECRET, GROQ_API_KEY, AGORA_*, SUPABASE_*
+
+# Start DB
+docker compose -f infra/docker/docker-compose.yml up -d
+
+# Install & build
+pnpm install
+pnpm --filter @trustroom/db generate
+pnpm --filter @trustroom/db db:push
+pnpm --filter @trustroom/types build
+pnpm --filter @trustroom/ai build
+pnpm --filter @trustroom/solana build
+pnpm --filter @trustroom/tts build
+pnpm --filter @trustroom/ui build
+pnpm --filter @trustroom/db build
+pnpm --filter @trustroom/api build
+pnpm --filter @trustroom/web build
+
+# Start với PM2
+pm2 start apps/api/dist/main.js --name trustroom-api --cwd apps/api
+pm2 start apps/web/.next/standalone/apps/web/server.js --name trustroom-web --cwd apps/web
+pm2 save
+pm2 startup
+```
+
+### Cấu trúc VPS
+
+```
+VPS (3GB RAM)
+├── Docker: PostgreSQL (300MB) + Redis (50MB)
+├── PM2: API NestJS (200MB) + Web Next.js (200MB)
+└── Nginx: reverse proxy port 80
+```
+
+Toàn bộ chỉ tốn ~**1-1.5GB RAM**, còn dư cho OS.
+
+### Nginx + Domain (tùy chọn)
+
+Nếu có domain, chạy script với flag:
+
+```bash
+bash scripts/deploy-vps.sh --domain trustroom.example.com
+```
+
+Sau đó setup SSL với Certbot:
+
+```bash
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d trustroom.example.com
+```
+
 ## Lưu ý
 
 - Escrow dùng **SOL** (native token) trên devnet — không phải USDC/SPL token

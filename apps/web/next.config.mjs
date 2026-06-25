@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   // Workspace packages are shipped as TypeScript source; let Next transpile them.
   transpilePackages: ['@trustroom/ui', '@trustroom/types'],
   // Proxy /api/* and /socket.io/ to the NestJS backend on port 4000.
