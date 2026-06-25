@@ -234,11 +234,11 @@ build_project() {
 
   info "Build project (turborepo)..."
   # Build từng package theo thứ tự để dễ debug nếu lỗi
+  # (ui package là source-only, không có build script)
   pnpm --filter @trustroom/types build 2>&1 || err "types build failed"
   pnpm --filter @trustroom/ai build 2>&1    || err "ai build failed"
   pnpm --filter @trustroom/solana build 2>&1|| err "solana build failed"
   pnpm --filter @trustroom/tts build 2>&1   || err "tts build failed"
-  pnpm --filter @trustroom/ui build 2>&1    || err "ui build failed"
   pnpm --filter @trustroom/db build 2>&1    || err "db build failed"
   pnpm --filter @trustroom/api build 2>&1   || err "API build failed"
   pnpm --filter @trustroom/web build 2>&1   || err "Web build failed"
