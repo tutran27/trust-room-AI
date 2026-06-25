@@ -13,6 +13,7 @@ import { ReputationModule } from './reputation/reputation.module';
 import { AgoraModule } from './agora/agora.module';
 import { AiModule } from './ai/ai.module';
 import { WebsocketModule } from './websocket/websocket.module';
+import { TranslationModule } from './translation/translation.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { AiVoiceModule } from './ai-voice/ai-voice.module';
 import { TermsModule } from './terms/terms.module';
@@ -41,6 +42,7 @@ import { TermsModule } from './terms/terms.module';
     MeetingsModule,
     AiVoiceModule,
     TermsModule,
+    TranslationModule,
   ],
 })
 export class AppModule {}

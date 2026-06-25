@@ -369,6 +369,7 @@ model MeetingSession {
   invites     MeetingInvite[]
   transcripts MeetingTranscript[]
   translations MeetingTranslation[]
+  translationJobs MeetingTranslationJob[]
   riskEvents  MeetingRiskEvent[]
 
   @@index([dealId])
@@ -451,6 +452,32 @@ model MeetingTranslation {
 
   @@index([transcriptId])
   @@index([sessionId])
+}
+
+// ─── Translation Job (TTS/Audio tracking) ──────────────────────────
+
+model MeetingTranslationJob {
+  id              String   @id @default(cuid())
+  sessionId       String
+  transcriptId    String?
+  speakerWallet   String?
+  sourceLang      String
+  targetLang      String
+  sourceText      String
+  translatedText  String?
+  ttsProvider     String?
+  audioUrl        String?
+  status          String   @default("pending") // pending | translating | tts | completed | error
+  error           String?
+  latency         Int?     // total latency in ms
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  session         MeetingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sessionId, status])
+  @@index([transcriptId])
 }
 
 // ─── Meeting Risk Events ────────────────────────────────────────────

@@ -40,6 +40,7 @@ import { formatRelativeTime } from '../../../lib/format';
 import { shortAddress } from '../../../lib/wallet';
 import { useAuth } from '../../../providers/auth-provider';
 import { useSocket } from '../../../providers/socket-provider';
+import { TranslationPanel } from '../../../components/translation-panel';
 
 interface RealtimeEntry {
   id: string;
@@ -303,6 +304,16 @@ function buildRiskFeedMessage(
   return parts.join(' ');
 }
 
+function buildRiskFeedContent(
+  event: { description: string; transcriptId: string | null },
+  transcriptContent: string | null,
+) {
+  return {
+    transcript: transcriptContent?.trim() || 'Chưa xác định được câu nói nguồn.',
+    warning: event.description.trim(),
+  };
+}
+
 export default function MeetingDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -516,6 +527,20 @@ export default function MeetingDetailPage() {
         return next.sort((left, right) => left.updatedAt - right.updatedAt).slice(-12);
       });
 
+      if (typeof window !== 'undefined') {
+        const sourceEvent = new CustomEvent('translation_source_ready', {
+          detail: {
+            meetingId,
+            transcriptId,
+            speakerWallet: transcript.speakerLabel ?? 'speaker',
+            text: transcript.content ?? '',
+            sourceLang: (transcript.language ?? 'vi').startsWith('en') ? 'en' : 'vi',
+            timestamp: new Date().toISOString(),
+          },
+        });
+        window.dispatchEvent(sourceEvent);
+      }
+
       void transcriptsQuery.refetch();
       void riskQuery.refetch();
     };
@@ -532,12 +557,62 @@ export default function MeetingDetailPage() {
       void riskQuery.refetch();
     };
 
+    const handleTranslatedTranscript = (payload: {
+      meetingId?: string;
+      transcriptId?: string;
+      speaker?: string;
+      sourceText?: string;
+      translatedText?: string;
+      sourceLang?: string;
+      targetLang?: string;
+      provider?: string;
+    }) => {
+      if (payload.meetingId !== meetingId) return;
+      // Dispatch custom event for TranslationPanel
+      const event = new CustomEvent('translated_transcript', {
+        detail: { ...payload, meetingId },
+      });
+      window.dispatchEvent(event);
+    };
+
+    const handleTranslationAudioReady = (payload: {
+      meetingId?: string;
+      jobId?: string;
+      audio_base64?: string;
+      format?: string;
+      sampleRate?: number;
+      translatedText?: string;
+    }) => {
+      if (payload.meetingId !== meetingId) return;
+      const event = new CustomEvent('translation_audio_ready', {
+        detail: { ...payload, meetingId },
+      });
+      window.dispatchEvent(event);
+    };
+
+    const handleTranslationError = (payload: {
+      meetingId?: string;
+      error?: string;
+    }) => {
+      if (payload.meetingId !== meetingId) return;
+      const event = new CustomEvent('translation_error', {
+        detail: { ...payload, meetingId },
+      });
+      window.dispatchEvent(event);
+    };
+
     socket.on('meeting_transcript', handleMeetingTranscript);
     socket.on('meeting_risk_event', handleMeetingRiskEvent);
+    socket.on('translated_transcript', handleTranslatedTranscript);
+    socket.on('translated_audio_ready', handleTranslationAudioReady);
+    socket.on('translation_error', handleTranslationError);
 
     return () => {
       socket.off('meeting_transcript', handleMeetingTranscript);
       socket.off('meeting_risk_event', handleMeetingRiskEvent);
+      socket.off('translated_transcript', handleTranslatedTranscript);
+      socket.off('translated_audio_ready', handleTranslationAudioReady);
+      socket.off('translation_error', handleTranslationError);
     };
   }, [meetingId, riskQuery, socket, transcriptsQuery]);
 
@@ -1227,6 +1302,9 @@ export default function MeetingDetailPage() {
             </div>
 
             <div className="space-y-6">
+              {/* Translation Panel */}
+              <TranslationPanel meetingId={meeting.id} />
+
               {/* Risk Feed */}
               {riskQuery.isLoading || topRiskEvents.length ? (
                 <Card>
@@ -1244,7 +1322,7 @@ export default function MeetingDetailPage() {
                         const linkedTranscript = event.transcriptId
                           ? transcriptById.get(event.transcriptId)
                           : null;
-                        const riskMessage = buildRiskFeedMessage(
+                        const riskContent = buildRiskFeedContent(
                           event,
                           linkedTranscript?.content ?? null,
                         );
@@ -1257,7 +1335,12 @@ export default function MeetingDetailPage() {
                             <div className="mb-2 flex flex-wrap items-center gap-2">
                               <Badge variant={riskVariant(event.severity)}>{event.severity}</Badge>
                             </div>
-                            <p className="text-sm leading-relaxed text-slate-700">{riskMessage}</p>
+                            <p className="text-sm font-semibold leading-relaxed text-slate-900">
+                              {riskContent.transcript}
+                            </p>
+                            <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                              {riskContent.warning}
+                            </p>
                           </div>
                         );
                       })

@@ -546,4 +546,18 @@ export class WebsocketGateway
       timestamp: new Date().toISOString(),
     });
   }
+
+  emitMeetingTranslationEvent(meetingId: string, event: string, payload: Record<string, unknown>) {
+    this.server.to(`meeting:${meetingId}`).emit(event, {
+      meetingId,
+      ...payload,
+    });
+  }
+
+  emitMeetingTranslationAudio(meetingId: string, payload: Record<string, unknown>) {
+    this.server.to(`meeting:${meetingId}`).emit('translated_audio_ready', {
+      meetingId,
+      ...payload,
+    });
+  }
 }
