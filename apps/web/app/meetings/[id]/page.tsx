@@ -276,11 +276,14 @@ export default function MeetingDetailPage() {
     [transcripts],
   );
   const lastTranscript = transcripts.length ? transcripts[transcripts.length - 1] : null;
+  const sttProvider = (process.env.NEXT_PUBLIC_STT_PROVIDER ?? 'agora') as 'agora' | 'groq';
   const [realtimeOn, setRealtimeOn] = useState(false);
   const [groqSttActive, setGroqSttActive] = useState(false);
   const groqSttRef = useRef<GroqSttClient | null>(null);
   const groqCounterRef = useRef(0);
-  const isDemoTranscriptMode = (!sttState || sttState?.mode === 'demo_manual') && !realtimeOn;
+  const isDemoTranscriptMode = sttProvider === 'agora'
+    ? (!sttState || sttState?.mode === 'demo_manual') && !realtimeOn
+    : false;
   const transcriptStatusLabel = startSttMutation.isPending ? 'starting' : realtimeOn ? 'on' : 'off';
   const startRealtimeDisabled = startSttMutation.isPending || realtimeOn;
   const tts = useRealtimeTts(socket, meetingId, currentParticipant?.role ?? null);
@@ -545,14 +548,15 @@ export default function MeetingDetailPage() {
     }
   }
 
-  async function handleStartGroqStt() {
-    if (!meetingId) return;
+  async function handleStartGroqStt(): Promise<boolean> {
+    if (!meetingId) return false;
     try {
       const client = new GroqSttClient();
       groqSttRef.current = client;
       setGroqSttActive(true);
       setRealtimeTransportState('waiting');
       setRealtimeNotice('Groq Whisper đang khởi động...');
+
       await client.start({
         meetingId,
         speakerLabel: speakerLabel.trim() || shortAddress(address, 6, 6),
@@ -561,9 +565,11 @@ export default function MeetingDetailPage() {
         onError: (error) => setRealtimeNotice(`Groq lỗi: ${error.message}`),
       });
       setRealtimeNotice('Groq Whisper đang chạy.');
+      return true;
     } catch (error) {
       setGroqSttActive(false);
       setRealtimeNotice(error instanceof Error ? error.message : 'Không bật được Groq');
+      return false;
     }
   }
 
@@ -597,6 +603,16 @@ export default function MeetingDetailPage() {
   }
 
   async function handleStartRealtime() {
+    if (sttProvider === 'groq') {
+      // Groq Whisper path: client-side capture, no backend Agora STT agent
+      const ok = await handleStartGroqStt();
+      if (ok) {
+        setRealtimeOn(true);
+      }
+      return;
+    }
+
+    // Agora cloud STT path (default)
     const languages = sttLanguageInput.split(',').map((item) => item.trim()).filter(Boolean);
     const targetLanguages = sttTargetLanguageInput
       .split(',')
@@ -636,6 +652,12 @@ export default function MeetingDetailPage() {
   }
 
   async function handleStopRealtime() {
+    if (sttProvider === 'groq') {
+      handleStopGroqStt();
+      setRealtimeOn(false);
+      return;
+    }
+
     await stopSttMutation.mutateAsync();
     setRealtimeOn(false);
     setRealtimeEntries([]);
@@ -824,20 +846,24 @@ export default function MeetingDetailPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="min-w-[180px]">
-                        <Select
-                          value={sttLanguageInput}
-                          onChange={(event) => setSttLanguageInput(event.target.value)}
-                          options={STT_LANGUAGE_OPTIONS}
-                        />
-                      </div>
-                      <div className="min-w-[200px]">
-                        <Select
-                          value={sttTargetLanguageInput}
-                          onChange={(event) => setSttTargetLanguageInput(event.target.value)}
-                          options={STT_TARGET_LANGUAGE_OPTIONS}
-                        />
-                      </div>
+                      {sttProvider === 'agora' ? (
+                        <>
+                          <div className="min-w-[180px]">
+                            <Select
+                              value={sttLanguageInput}
+                              onChange={(event) => setSttLanguageInput(event.target.value)}
+                              options={STT_LANGUAGE_OPTIONS}
+                            />
+                          </div>
+                          <div className="min-w-[200px]">
+                            <Select
+                              value={sttTargetLanguageInput}
+                              onChange={(event) => setSttTargetLanguageInput(event.target.value)}
+                              options={STT_TARGET_LANGUAGE_OPTIONS}
+                            />
+                          </div>
+                        </>
+                      ) : null}
                       <Button
                         onClick={() => void handleStartRealtime()}
                         disabled={startRealtimeDisabled}
@@ -848,29 +874,12 @@ export default function MeetingDetailPage() {
                         variant="ghost"
                         onClick={() => void handleStopRealtime()}
                         disabled={
-                          stopSttMutation.isPending ||
-                          !meetingId ||
-                          !['running', 'fallback_asr_only'].includes(sttState?.status ?? '')
+                          sttProvider === 'groq'
+                            ? !groqSttActive
+                            : stopSttMutation.isPending ||
+                              !meetingId ||
+                              !['running', 'fallback_asr_only'].includes(sttState?.status ?? '')
                         }
-                      >
-                        Tắt
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 mt-3">
-                      <span className="text-xs font-medium text-slate-400 uppercase tracking-wider mr-2">
-                        Groq Whisper:
-                      </span>
-                      <Button
-                        variant={groqSttActive ? 'primary' : 'ghost'}
-                        onClick={() => void handleStartGroqStt()}
-                        disabled={groqSttActive || !meetingId}
-                      >
-                        {groqSttActive ? 'Groq đang chạy' : 'Groq STT'}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={handleStopGroqStt}
-                        disabled={!groqSttActive}
                       >
                         Tắt
                       </Button>

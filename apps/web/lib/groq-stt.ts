@@ -116,7 +116,15 @@ export class GroqSttClient {
 
   // ─── Public API ─────────────────────────────────────────────────────
 
-  async start(opts: GroqSttOptions): Promise<void> {
+  /**
+   * Start listening. Captures mic via getUserMedia (separate from Agora).
+   * An external MediaStream can be passed to avoid a second getUserMedia call
+   * (e.g. from Agora's local audio track), but note that Agora may replace its
+   * underlying track during setEnabled — when that happens the shared stream
+   * goes silent. By default (no externalStream) this method does its own
+   * getUserMedia which is decoupled and reliable.
+   */
+  async start(opts: GroqSttOptions, externalStream?: MediaStream): Promise<void> {
     if (this.isActive) return;
     this.options = opts;
     this.resetVad();
@@ -127,10 +135,20 @@ export class GroqSttClient {
     this.sendTimestamps = [];
 
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
-        video: false,
-      });
+      if (externalStream) {
+        // Reuse external stream (e.g. from Agora RTC) — avoids double-mic quality loss
+        this.stream = externalStream;
+      } else {
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: { ideal: SAMPLE_RATE },
+            channelCount: { ideal: 1 },
+          },
+          video: false,
+        });
+      }
 
       this.audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
       if (this.audioCtx.state === 'suspended') await this.audioCtx.resume();
