@@ -48,3 +48,10 @@ coverage/
 # vibecode harness backup
 .vibecode-backup*/
 
+
+services/speech_translate/.hf-cache/
+.hf-cache/
+*.bin
+*.safetensors
+*.pt
+*.pth
