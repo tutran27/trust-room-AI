@@ -16,7 +16,7 @@ import {
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
 } from '@solana/web3.js';
-import { getConnection, deriveEscrowPda, type SolanaCluster } from './index';
+import { getConnection, deriveEscrowPda, type SolanaCluster } from './index.js';
 
 // ── Program ID (must match declare_id! in lib.rs) ──────────────────────────
 export const ESCROW_PROGRAM_ID = new PublicKey('3DyccqgiVSUupDEfgvME8rduMHAgJdLxqhGEdPuhbjR7');

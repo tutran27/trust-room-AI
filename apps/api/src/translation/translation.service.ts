@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
 import { TranslateTranscriptDto } from './dto/translate-transcript.dto';
 import { TranslationChunker } from './translation-chunker.service';
 import { TranslationCacheService } from './translation-cache.service';
+import { WebsocketGateway } from '../websocket/websocket.gateway';
 
 interface TranslationResponse {
   translated_text: string;
@@ -37,27 +38,29 @@ export class TranslationService {
 
   private readonly chunker = new TranslationChunker();
   private _websocketGateway: any;
+  private readonly pendingRequests = new Map<string, AbortController>();
 
   constructor(
-    private readonly configService: ConfigService,
+    @Inject(ConfigService) private readonly configService: ConfigService,
+    @Inject(TranslationCacheService)
     private readonly cacheService: TranslationCacheService,
-    private readonly moduleRef: ModuleRef,
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {
     this.pythonServiceUrl =
       this.configService.get<string>('SPEECH_TRANSLATE_SERVICE_URL') ??
       'http://localhost:4100';
     this.translateTimeout =
-      this.configService.get<number>('TRANSLATION_TIMEOUT_MS') ?? 3000;
+      this.configService.get<number>('TRANSLATION_TIMEOUT_MS') ?? 45000;
     this.ttsTimeout =
-      this.configService.get<number>('TTS_TIMEOUT_MS') ?? 5000;
+      this.configService.get<number>('TTS_TIMEOUT_MS') ?? 30000;
     this.speechTranslateTimeout =
-      this.configService.get<number>('SPEECH_TRANSLATE_TIMEOUT_MS') ?? 15000;
+      this.configService.get<number>('SPEECH_TRANSLATE_TIMEOUT_MS') ?? 60000;
   }
 
   private get websocketGateway() {
     if (!this._websocketGateway) {
       try {
-        this._websocketGateway = this.moduleRef.get('WebsocketGateway', { strict: false });
+        this._websocketGateway = this.moduleRef.get(WebsocketGateway, { strict: false });
       } catch {
         this._websocketGateway = null;
       }
@@ -68,10 +71,21 @@ export class TranslationService {
   private async fetchWithTimeout(
     url: string,
     options: RequestInit & { timeout?: number },
+    transcriptId?: string,
   ): Promise<Response> {
-    const { timeout = 5000, ...fetchOptions } = options;
+    const { timeout = 15000, ...fetchOptions } = options;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    // If we have a transcriptId, cancel any previous request for it
+    if (transcriptId) {
+      const existing = this.pendingRequests.get(transcriptId);
+      if (existing) {
+        existing.abort();
+      }
+      this.pendingRequests.set(transcriptId, controller);
+    }
+
     try {
       const response = await fetch(url, {
         ...fetchOptions,
@@ -80,6 +94,9 @@ export class TranslationService {
       return response;
     } finally {
       clearTimeout(timeoutId);
+      if (transcriptId && this.pendingRequests.get(transcriptId) === controller) {
+        this.pendingRequests.delete(transcriptId);
+      }
     }
   }
 
@@ -95,6 +112,21 @@ export class TranslationService {
       return (await resp.json()) as { status: string; message?: string };
     } catch {
       return { status: 'unavailable', message: 'Python speech translate service unreachable' };
+    }
+  }
+
+  /**
+   * Send a warmup request to the Python service to load the translation model in the background.
+   */
+  async warmupModel(): Promise<void> {
+    try {
+      await this.fetchWithTimeout(`${this.pythonServiceUrl}/load-model`, {
+        method: 'POST',
+        timeout: 2000,
+      });
+      this.logger.log('Sent warmup request to speech translate service');
+    } catch (err: any) {
+      this.logger.warn(`Failed to warmup model: ${err.message}`);
     }
   }
 
@@ -126,6 +158,7 @@ export class TranslationService {
           }),
           timeout: this.translateTimeout,
         },
+        dto.transcriptId,
       );
       if (!resp.ok) {
         const errorBody = await resp.text();
@@ -135,9 +168,13 @@ export class TranslationService {
       this.cacheService.setTranslation(cacheKey, result);
       return result;
     } catch (err: any) {
+      if (err.name === 'AbortError') {
+        this.logger.debug(`Translation request for ${dto.transcriptId} was aborted by a newer request.`);
+        throw err;
+      }
       this.logger.error(`Translation failed: ${err.message}`);
       // Emit error via socket
-      this.websocketGateway.emitMeetingTranslationEvent(dto.meetingId, 'translation_error', {
+      this.websocketGateway?.emitMeetingTranslationEvent(dto.meetingId, 'translation_error', {
         meetingId: dto.meetingId,
         transcriptId: dto.transcriptId,
         speakerWallet: dto.speakerWallet,
@@ -199,7 +236,7 @@ export class TranslationService {
     const startTime = Date.now();
 
     // Emit job created
-    this.websocketGateway.emitMeetingTranslationEvent(
+    this.websocketGateway?.emitMeetingTranslationEvent(
       dto.meetingId,
       'translation_job_created',
       {
@@ -240,8 +277,11 @@ export class TranslationService {
           ttsLatency += ttsResult.latency_ms;
         }
       } catch (err: any) {
+        if (err.name === 'AbortError') {
+          this.logger.debug('Chunk translation aborted.');
+          throw err;
+        }
         this.logger.warn(`Chunk translation failed: ${err.message}`);
-        // Continue with next chunk
       }
     }
 
@@ -258,7 +298,7 @@ export class TranslationService {
     };
 
     // Emit translated transcript
-    this.websocketGateway.emitMeetingTranslationEvent(
+    this.websocketGateway?.emitMeetingTranslationEvent(
       dto.meetingId,
       'translated_transcript',
       {
@@ -274,7 +314,7 @@ export class TranslationService {
 
     // Emit audio ready if we have audio
     if (ttsAudioBase64) {
-      this.websocketGateway.emitMeetingTranslationAudio(
+      this.websocketGateway?.emitMeetingTranslationAudio(
         dto.meetingId,
         {
           meetingId: dto.meetingId,
@@ -309,11 +349,6 @@ export class TranslationService {
     speakerWallet?: string;
     isFinal: boolean;
   }): Promise<void> {
-    if (!params.isFinal) {
-      // Partial transcript: display only, no TTS
-      return;
-    }
-
     // Check de-dup
     if (this.chunker.isDuplicate(params.text)) {
       this.logger.debug(`Duplicate chunk skipped: ${params.text}`);
@@ -341,13 +376,13 @@ export class TranslationService {
     dto.meetingId = params.meetingId;
     dto.transcriptId = params.transcriptId;
     dto.speakerWallet = params.speakerWallet;
-    dto.tts = true;
+    dto.tts = params.isFinal; // Only run TTS when chunk is final
 
     try {
       await this.speechTranslate(dto);
     } catch (err: any) {
       this.logger.error(`handleTranscriptChunk failed: ${err.message}`);
-      this.websocketGateway.emitMeetingTranslationEvent(
+      this.websocketGateway?.emitMeetingTranslationEvent(
         params.meetingId,
         'translation_error',
         {

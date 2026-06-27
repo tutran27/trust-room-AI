@@ -58,6 +58,91 @@ interface RealtimeEntry {
 
 const SPEAKER_TURN_SILENCE_WINDOW_SECONDS = 14;
 
+function detectTranscriptLanguage(
+  text: string,
+  reportedLanguage?: string | null,
+): 'vi' | 'en' | 'auto' {
+  const normalizedReported = (reportedLanguage ?? '').trim().toLowerCase();
+  if (
+    normalizedReported.startsWith('en') ||
+    normalizedReported === 'english'
+  ) {
+    return 'en';
+  }
+  if (
+    normalizedReported.startsWith('vi') ||
+    normalizedReported === 'vietnamese'
+  ) {
+    return 'vi';
+  }
+
+  const normalizedText = text.trim().toLowerCase();
+  if (!normalizedText) {
+    return 'auto';
+  }
+
+  // Strong Vietnamese signal: has diacritics → definitely vi
+  const hasVietnameseDiacritics =
+    /[ăâêôơưđáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i.test(
+      normalizedText,
+    );
+  if (hasVietnameseDiacritics) {
+    return 'vi';
+  }
+
+  // Common English signals (expanded list)
+  const englishSignals = [
+    'hello', 'hi', 'thanks', 'thank you', 'please', 'okay', 'ok',
+    'yes', 'no', 'deal', 'payment', 'contract', 'meeting', 'delivery',
+    'price', 'transfer', 'telegram', 'whatsapp', 'buy', 'sell', 'trade',
+    'agree', 'accept', 'confirm', 'reject', 'propose', 'offer',
+    'percent', 'amount', 'total', 'balance', 'wallet', 'token',
+    'address', 'deposit', 'withdraw', 'receive', 'send', 'ship',
+    'insurance', 'escrow', 'dispute', 'resolution', 'arbitration',
+    'quality', 'inspection', 'guarantee', 'sample', 'order',
+    'discount', 'commission', 'fee', 'tax', 'shipping', 'tracking',
+    'the', 'this', 'that', 'with', 'from', 'have', 'will', 'would',
+    'could', 'should', 'shall', 'about', 'which', 'there', 'their',
+    'what', 'when', 'where', 'how', 'are', 'were', 'been', 'been',
+    'only', 'just', 'also', 'very', 'good', 'great', 'sure', 'right',
+    'time', 'day', 'week', 'month', 'year', 'thing', 'people',
+  ];
+  const englishHits = englishSignals.filter((token) => {
+    const idx = normalizedText.indexOf(token);
+    // Must be a whole-word match (not part of another word)
+    if (idx === -1) return false;
+    const before = idx === 0 ? ' ' : normalizedText[idx - 1];
+    const after = idx + token.length >= normalizedText.length ? ' ' : normalizedText[idx + token.length];
+    return !/[a-z]/i.test(before) && !/[a-z]/i.test(after);
+  }).length;
+
+  const asciiLetters =
+    (normalizedText.match(/[a-z]/g) ?? []).length;
+  const nonAsciiLetters =
+    (normalizedText.match(/[à-ỹ]/gi) ?? []).length;
+
+  // Strong English signal: multiple signal words or high ASCII ratio
+  if (englishHits >= 2) {
+    return 'en';
+  }
+
+  // Ratio-based detection
+  const totalChars = normalizedText.replace(/\s/g, '').length;
+  if (totalChars > 0) {
+    // High ASCII → likely English
+    if (asciiLetters / totalChars > 0.6 && nonAsciiLetters / totalChars < 0.05) {
+      return 'en';
+    }
+    // High non-ASCII → likely Vietnamese (but no diacritics still means uncertain)
+    if (nonAsciiLetters / totalChars > 0.3) {
+      return 'vi';
+    }
+  }
+
+  // When uncertain, let the backend auto-detect
+  return 'auto';
+}
+
 function normalizeRealtimeText(value: string) {
   return value.trim().replace(/\s+/g, ' ');
 }
@@ -366,7 +451,7 @@ export default function MeetingDetailPage() {
   const [speakerLabel, setSpeakerLabel] = useState('');
   const [transcriptContent, setTranscriptContent] = useState('');
   const [transcriptLanguage, setTranscriptLanguage] = useState('vi');
-  const [sttLanguageInput, setSttLanguageInput] = useState('vi-VN');
+  const [sttLanguageInput, setSttLanguageInput] = useState('vi-VN,en-US');
   const [sttTargetLanguageInput, setSttTargetLanguageInput] = useState('');
   const [realtimeEntries, setRealtimeEntries] = useState<RealtimeEntry[]>([]);
   const [hasJoinedRoom, setHasJoinedRoom] = useState(
@@ -534,8 +619,12 @@ export default function MeetingDetailPage() {
             transcriptId,
             speakerWallet: transcript.speakerLabel ?? 'speaker',
             text: transcript.content ?? '',
-            sourceLang: (transcript.language ?? 'vi').startsWith('en') ? 'en' : 'vi',
+            sourceLang: detectTranscriptLanguage(
+              transcript.content ?? '',
+              transcript.language,
+            ),
             timestamp: new Date().toISOString(),
+            isFinal: true,
           },
         });
         window.dispatchEvent(sourceEvent);
@@ -724,6 +813,22 @@ export default function MeetingDetailPage() {
         : 'Đang nhận transcript realtime từ cuộc họp.',
     );
     upsertRealtimeEntry(chunk);
+
+    if (typeof window !== 'undefined') {
+      const sourceEvent = new CustomEvent('translation_source_ready', {
+        detail: {
+          meetingId,
+          transcriptId: chunk.chunkId,
+          speakerWallet: chunk.speakerLabel ?? 'speaker',
+          text: chunk.text ?? '',
+          sourceLang: detectTranscriptLanguage(chunk.text ?? '', chunk.language),
+          timestamp: new Date().toISOString(),
+          isFinal: chunk.isFinal,
+        },
+      });
+      window.dispatchEvent(sourceEvent);
+    }
+
     if (chunk.isFinal) {
       void persistRealtimeChunk(chunk);
     }
@@ -757,11 +862,13 @@ export default function MeetingDetailPage() {
 
     setRealtimeEntries((current) => {
       const next = current.filter((entry) => entry.id !== chunkId);
+      const detectedLanguage = detectTranscriptLanguage(text, 'auto');
       next.push({
         id: chunkId,
         speakerLabel: speaker,
         text,
-        language: 'vi',
+        source: 'stream',
+        language: detectedLanguage,
         translatedText: null,
         targetLanguage: null,
         startTime: null,
@@ -775,16 +882,33 @@ export default function MeetingDetailPage() {
     setRealtimeTransportState('receiving');
     setRealtimeNotice('Đang nhận transcript từ Groq Whisper.');
 
+    if (typeof window !== 'undefined') {
+      const detectedLanguage = detectTranscriptLanguage(text, 'auto');
+      const sourceEvent = new CustomEvent('translation_source_ready', {
+        detail: {
+          meetingId,
+          transcriptId: chunkId,
+          speakerWallet: speaker,
+          text,
+          sourceLang: detectedLanguage,
+          timestamp: new Date().toISOString(),
+          isFinal: true,
+        },
+      });
+      window.dispatchEvent(sourceEvent);
+    }
+
     const persistText = async () => {
       if (persistedChunkIdsRef.current.has(chunkId)) return;
       persistedChunkIdsRef.current.add(chunkId);
       const lastTs = lastTranscript?.endTime ?? lastTranscript?.startTime ?? 0;
       try {
+        const detectedLanguage = detectTranscriptLanguage(text, 'auto');
         await addTranscriptMutation.mutateAsync({
           participantId: currentParticipant?.id,
           speakerLabel: speaker,
           content: text,
-          language: 'vi',
+          language: detectedLanguage,
           startTime: lastTs,
           endTime: lastTs + 2,
           confidence: 0.95,
@@ -817,7 +941,7 @@ export default function MeetingDetailPage() {
       await client.start({
         meetingId,
         speakerLabel: speakerLabel.trim() || shortAddress(address, 6, 6),
-        language: 'vi',
+        language: sttLanguageInput.includes('en-US') ? 'en' : 'vi',
         onTranscript: handleGroqTranscript,
         onError: (error) => setRealtimeNotice(`Groq lỗi: ${error.message}`),
       });
@@ -878,8 +1002,7 @@ export default function MeetingDetailPage() {
 
     try {
       setRealtimeTransportState('waiting');
-      // Chỉ gửi đúng 1 ngôn ngữ đã chọn (vi-VN hoặc en-US)
-      const detectLanguages = languages.filter(Boolean).slice(0, 1);
+      const detectLanguages = languages.filter(Boolean).slice(0, 4);
       const hasTranslation = targetLanguages.length > 0;
       const result = await startSttMutation.mutateAsync({
         languages: detectLanguages,

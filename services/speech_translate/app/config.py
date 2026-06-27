@@ -5,13 +5,33 @@ import os
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
+from dotenv import load_dotenv
+
+
+SERVICE_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+# Load both service-local and repo-root env files so the Python service can run
+# standalone while still sharing the main project .env.
+load_dotenv(SERVICE_ROOT / ".env", override=False)
+load_dotenv(REPO_ROOT / ".env", override=False)
 
 
 @dataclass(frozen=True)
 class Config:
     """Read-only config populated from environment variables."""
 
-    # Translation model
+    # Translation provider
+    translation_provider: str = os.getenv("TRANSLATION_PROVIDER", "azure").lower()
+    azure_translator_key: str = os.getenv("AZURE_TRANSLATOR_KEY", "")
+    azure_translator_endpoint: str = os.getenv(
+        "AZURE_TRANSLATOR_ENDPOINT",
+        "https://api.cognitive.microsofttranslator.com",
+    )
+    azure_translator_region: str = os.getenv("AZURE_TRANSLATOR_REGION", "")
+    azure_translator_api_version: str = os.getenv("AZURE_TRANSLATOR_API_VERSION", "3.0")
+
+    # Local translation model fallback
     translation_model: str = os.getenv("TRANSLATION_MODEL", "VietAI/envit5-translation")
     translation_device: str = os.getenv("TRANSLATION_DEVICE", "auto")
     translation_dtype: str = os.getenv("TRANSLATION_DTYPE", "float32")
@@ -67,6 +87,15 @@ class Config:
             except ImportError:
                 return "cpu"
         return self.translation_device
+
+    @property
+    def azure_translate_enabled(self) -> bool:
+        return bool(
+            self.translation_provider == "azure"
+            and self.azure_translator_key
+            and self.azure_translator_endpoint
+            and self.azure_translator_region
+        )
 
 
 _config: Optional[Config] = None

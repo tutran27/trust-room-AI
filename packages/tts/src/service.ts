@@ -15,15 +15,15 @@
  * output device while subsequent clauses are still being generated.
  */
 
-import type { TTSConfig } from './config';
-import type { TTSProvider, SpeakerLabel } from './types';
-import { createGoogleProvider } from './providers/google-tts';
-import { createEdgeProvider } from './providers/edge-tts';
-import { normalizeText } from './normalize';
-import { detectLanguageChunks, guessLanguage } from './language';
-import { splitClauses, type Clause } from './chunk';
-import { processLoudnessChain } from './audio';
-import { DEFAULT_CONFIG } from './config';
+import type { TTSConfig } from './config.js';
+import type { TTSProvider, SpeakerLabel } from './types.js';
+import { createGoogleProvider } from './providers/google-tts.js';
+import { createEdgeProvider } from './providers/edge-tts.js';
+import { normalizeText } from './normalize.js';
+import { detectLanguageChunks, guessLanguage } from './language.js';
+import { splitClauses, type Clause } from './chunk.js';
+import { processLoudnessChain } from './audio.js';
+import { DEFAULT_CONFIG } from './config.js';
 
 const SENTENCE_MARKER = '__sentence__';
 const DONE = '__done__';

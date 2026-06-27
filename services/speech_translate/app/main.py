@@ -6,23 +6,29 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.audio_postprocess import postprocess_audio
 from app.config import get_config
 from app.schemas import (
     HealthResponse,
+    SpeechTranslateRequest,
+    SpeechTranslateResponse,
     TranslateRequest,
     TranslateResponse,
     TTSRequest,
     TTSResponse,
-    SpeechTranslateRequest,
-    SpeechTranslateResponse,
 )
-from app.translator import translate, load_model, is_model_loaded
-from app.tts_google import synthesize_speech as google_synthesize
+from app.translator import (
+    get_translation_backend_name,
+    is_model_loaded,
+    load_model,
+    translate,
+    using_azure,
+)
 from app.tts_edge import synthesize_speech as edge_synthesize
-from app.audio_postprocess import postprocess_audio
+from app.tts_google import synthesize_speech as google_synthesize
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -30,16 +36,17 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model on startup."""
+    """Load model on startup when using local translation fallback."""
     cfg = get_config()
     logger.info(
-        "Translation service starting — model=%s device=%s dtype=%s preload_model=%s",
-        cfg.translation_model,
+        "Translation service starting - provider=%s backend=%s device=%s dtype=%s preload_model=%s",
+        "azure" if using_azure() else "local",
+        get_translation_backend_name(),
         cfg.resolved_translation_device,
         cfg.translation_dtype,
         cfg.preload_model,
     )
-    if cfg.preload_model:
+    if cfg.preload_model and not using_azure():
         logger.info("Pre-loading translation model...")
         try:
             load_model()
@@ -47,6 +54,8 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("Failed to pre-load translation model!")
             raise
+    elif using_azure():
+        logger.info("Azure Translator is active; no local model preload required.")
     else:
         logger.warning(
             "Translation model NOT pre-loaded (preload_model=false). "
@@ -75,10 +84,21 @@ async def health():
     cfg = get_config()
     return HealthResponse(
         status="ok",
-        model=cfg.translation_model,
+        model=get_translation_backend_name(),
         device=cfg.resolved_translation_device,
         model_loaded=is_model_loaded(),
     )
+
+
+@app.post("/load-model")
+async def load_model_endpoint(background_tasks: BackgroundTasks):
+    """Start loading the local fallback model in the background if not already loaded."""
+    if using_azure():
+        return {"status": "azure_noop", "model_loaded": True, "provider": "azure"}
+    if not is_model_loaded():
+        logger.info("Background model load triggered via /load-model endpoint")
+        background_tasks.add_task(load_model)
+    return {"status": "loading_or_loaded", "model_loaded": is_model_loaded()}
 
 
 @app.post("/translate", response_model=TranslateResponse)
@@ -112,13 +132,14 @@ async def tts(req: TTSRequest):
     audio_bytes, google_latency = await google_synthesize(req.text, req.language, req.speed)
 
     provider = "google"
+    latency_ms = google_latency
     if audio_bytes is None:
         # Fallback to Edge TTS
         audio_bytes, edge_latency = await edge_synthesize(req.text, req.language, req.speed)
         provider = "edge"
+        latency_ms = edge_latency
 
     if audio_bytes is None:
-        # Text-only fallback
         return TTSResponse(
             audio_base64=None,
             audio_format=None,
@@ -126,9 +147,7 @@ async def tts(req: TTSRequest):
             latency_ms=0,
         )
 
-    # Post-process audio
     audio_bytes = postprocess_audio(audio_bytes) or audio_bytes
-
     audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
     audio_format = cfg.google_tts_audio_encoding.lower()
 
@@ -136,7 +155,7 @@ async def tts(req: TTSRequest):
         audio_base64=audio_b64,
         audio_format=audio_format,
         provider=provider,
-        latency_ms=google_latency,
+        latency_ms=latency_ms,
     )
 
 
@@ -150,14 +169,12 @@ async def speech_translate(req: SpeechTranslateRequest):
     cfg = get_config()
     total_start = time.monotonic()
 
-    # Step 1: Translate
     try:
         translated, translate_latency = await translate(req.text, req.source_lang, req.target_lang)
     except Exception as exc:
         logger.exception("Translation failed in speech-translate")
         raise HTTPException(status_code=500, detail=f"Translation failed: {exc}")
 
-    # Step 2: TTS (if requested)
     audio_b64 = None
     audio_format = None
     tts_provider = "none"

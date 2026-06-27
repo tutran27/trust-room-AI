@@ -7,7 +7,7 @@
  * use the correct voice per language.
  */
 
-import type { LangChunk, LanguageCode } from './types';
+import type { LangChunk, LanguageCode } from './types.js';
 
 // ─── English term patterns ─────────────────────────────────────────────
 

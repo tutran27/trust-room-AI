@@ -231,6 +231,7 @@ export async function joinAgoraMeeting(params: {
           AEC: true,
           ANS: true,
           AGC: true,
+          encoderConfig: 'speech_standard',
         });
       } catch {}
     }

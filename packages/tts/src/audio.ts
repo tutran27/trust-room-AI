@@ -6,7 +6,7 @@
  * The output is PCM int16 at 24 kHz mono, ready for the queue consumer.
  */
 
-import type { LoudnessParams } from './types';
+import type { LoudnessParams } from './types.js';
 
 const S24 = 32768; // 2^15 (max int16 amplitude)
 

@@ -43,10 +43,19 @@ export interface AudioTrackResult {
  */
 export async function createMicrophoneAudioTrack(): Promise<AudioTrackResult> {
   // Step 1: Create the track with built-in AEC, ANS, AGC enabled.
+  // Use `speech_high_quality` for better STT input quality (48 kHz, higher bitrate).
   const track = await AgoraRTC.createMicrophoneAudioTrack({
     AEC: true,
     ANS: true,
     AGC: true,
+    encoderConfig: {
+      bitrate: 64,
+      sampleRate: 48000,
+      stereo: false,
+    },
+    // Additional advanced noise suppression for consistent STT results
+    AECHighSuppression: true,
+    AGCLevel: 3,
   });
 
   // Step 2: Try to layer the AI denoiser on top.
@@ -60,6 +69,16 @@ export async function createMicrophoneAudioTrack(): Promise<AudioTrackResult> {
       // `track.pipe(processor).pipe(track.processorDestination)`.
       const p = denoiser.processor as any;
       if (p && typeof p === 'object' && typeof track.pipe === 'function') {
+        if (typeof p.setMode === 'function') {
+          try {
+            p.setMode('aggressive');
+          } catch {}
+        }
+        if (typeof p.setLevel === 'function') {
+          try {
+            p.setLevel(3);
+          } catch {}
+        }
         track.pipe(p).pipe(track.processorDestination);
         denoiser.setEnabled(true);
         console.log('[AgoraAudio] AI denoiser layered onto microphone track');

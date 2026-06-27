@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { apiFetch } from '@/lib/api-client';
@@ -86,12 +86,20 @@ export function TranslationPanel({
   const [translateStatus, setTranslateStatus] = useState<'idle' | 'waiting' | 'translating' | 'done' | 'error'>('idle');
   const [translateLog, setTranslateLog] = useState('Chưa có transcript để dịch.');
   const [jobLogs, setJobLogs] = useState<TranslationJobLog[]>([]);
-  const translatedTranscriptIdsRef = useRef(new Set<string>());
-  // Audio control state (we handle playback via window events forwarded from use-deal-room)
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolume] = useState(0.8);
-  const [playbackEnabled, setPlaybackEnabled] = useState(true);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const translatedTranscriptTextRef = useRef(new Map<string, string>());
+  const translatedScript = useMemo(
+    () =>
+      captions
+        .slice()
+        .sort(
+          (left, right) =>
+            new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
+        ),
+    [captions],
+  );
+  
+  // Audio control state via hook
+  const { enqueueAudio, isPlaying, volume, setVolume, enabled: playbackEnabled, setEnabled: setPlaybackEnabled } = useTranslationAudioPlayback();
 
   // Listen for audio ready events dispatched from the meeting page
   useEffect(() => {
@@ -99,19 +107,14 @@ export function TranslationPanel({
 
     const handleAudioReady = (event: CustomEvent) => {
       const data = event.detail;
-      if (data.meetingId !== meetingId) return;
+      if (data.meetingId !== meetingId || !data.audio_base64) return;
 
-      setIsPlaying(true);
-      try {
-        const audio = new Audio(`data:audio/mp3;base64,${data.audio_base64}`);
-        audio.volume = volume;
-        audioRef.current = audio;
-        audio.onended = () => setIsPlaying(false);
-        audio.onerror = () => setIsPlaying(false);
-        void audio.play().catch(() => setIsPlaying(false));
-      } catch {
-        setIsPlaying(false);
-      }
+      enqueueAudio({
+        audioBase64: data.audio_base64,
+        translatedText: data.translatedText || '',
+        provider: data.provider,
+        timestamp: data.timestamp || new Date().toISOString(),
+      });
     };
 
     window.addEventListener(
@@ -124,7 +127,7 @@ export function TranslationPanel({
         handleAudioReady as EventListener,
       );
     };
-  }, [meetingId, settings.enabled, playbackEnabled, volume]);
+  }, [meetingId, settings.enabled, playbackEnabled, enqueueAudio]);
 
   function handleToggle(enabled: boolean) {
     setSettings((prev) => ({ ...prev, enabled }));
@@ -155,89 +158,103 @@ export function TranslationPanel({
     });
   }, []);
 
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTranslateTimeRef = useRef<number>(0);
+
   useEffect(() => {
     if (!settings.enabled) return;
 
-    const handleTranslationSource = async (event: Event) => {
+    const handleTranslationSource = (event: Event) => {
       const payload = (event as CustomEvent).detail as {
         meetingId?: string;
         transcriptId?: string;
         speakerWallet?: string;
         text?: string;
         sourceLang?: TranslationLang;
+        isFinal?: boolean;
       };
 
       if (
         payload.meetingId !== meetingId ||
         !payload.transcriptId ||
-        !payload.text?.trim() ||
-        translatedTranscriptIdsRef.current.has(payload.transcriptId)
+        !payload.text?.trim()
       ) {
-        if (
-          payload.meetingId === meetingId &&
-          payload.transcriptId &&
-          translatedTranscriptIdsRef.current.has(payload.transcriptId)
-        ) {
-          pushJobLog({
-            transcriptId: payload.transcriptId,
-            text: payload.text?.trim() ?? '',
-            status: 'skipped',
-            message: 'Bỏ qua vì transcript này đã được gửi dịch trước đó.',
-            timestamp: new Date().toISOString(),
-          });
-        }
         return;
       }
 
-      translatedTranscriptIdsRef.current.add(payload.transcriptId);
-      setTranslateStatus('translating');
-      setTranslateLog(`Đang dịch transcript ${payload.transcriptId.slice(0, 8)}...`);
-      pushJobLog({
-        transcriptId: payload.transcriptId,
-        text: payload.text.trim(),
-        status: 'translating',
-        message: 'Đã gửi sang translation service.',
-        timestamp: new Date().toISOString(),
-      });
+      const transcriptId = payload.transcriptId;
+      const text = payload.text.trim();
+      const lastTranslatedText = translatedTranscriptTextRef.current.get(transcriptId);
+      if (lastTranslatedText === text) {
+        return;
+      }
 
-      try {
-        await apiFetch('/translation/speech-translate', {
-          method: 'POST',
-          body: {
-            text: payload.text,
-            source_lang: payload.sourceLang === 'en' ? 'en' : 'vi',
-            target_lang: settings.targetLang || 'en',
-            meetingId,
-            transcriptId: payload.transcriptId,
-            speakerWallet: payload.speakerWallet,
-            tts: playbackEnabled,
-          },
-        });
+      translatedTranscriptTextRef.current.set(transcriptId, text);
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+
+      const doTranslate = async () => {
+        lastTranslateTimeRef.current = Date.now();
+        setTranslateStatus('translating');
+        setTranslateLog(`Đang dịch transcript ${transcriptId.slice(0, 8)}...`);
         pushJobLog({
-          transcriptId: payload.transcriptId,
-          text: payload.text.trim(),
-          status: 'queued',
-          message: 'API đã nhận request, đang chờ kết quả translated transcript.',
+          transcriptId,
+          text,
+          status: 'translating',
+          message: 'Đã gửi sang translation service.',
           timestamp: new Date().toISOString(),
         });
-      } catch (translateError) {
-        translatedTranscriptIdsRef.current.delete(payload.transcriptId);
-        setTranslateStatus('error');
-        setTranslateLog(
-          translateError instanceof Error
-            ? `Dịch thất bại: ${translateError.message}`
-            : 'Dịch thất bại.',
-        );
-        pushJobLog({
-          transcriptId: payload.transcriptId,
-          text: payload.text.trim(),
-          status: 'error',
-          message:
+
+        try {
+          await apiFetch('/translation/speech-translate', {
+            method: 'POST',
+            body: {
+              text,
+              source_lang: payload.sourceLang === 'en' ? 'en' : 'vi',
+              target_lang: settings.targetLang || 'en',
+              meetingId,
+              transcriptId,
+              speakerWallet: payload.speakerWallet,
+              tts: playbackEnabled && (payload.isFinal !== false),
+            },
+          });
+          pushJobLog({
+            transcriptId,
+            text,
+            status: 'queued',
+            message: 'API đã nhận request, đang chờ kết quả translated transcript.',
+            timestamp: new Date().toISOString(),
+          });
+        } catch (translateError) {
+          translatedTranscriptTextRef.current.delete(transcriptId);
+          setTranslateStatus('error');
+          setTranslateLog(
             translateError instanceof Error
-              ? translateError.message
-              : 'Không gọi được translation service.',
-          timestamp: new Date().toISOString(),
-        });
+              ? `Dịch thất bại: ${translateError.message}`
+              : 'Dịch thất bại.',
+          );
+          pushJobLog({
+            transcriptId,
+            text,
+            status: 'error',
+            message:
+              translateError instanceof Error
+                ? translateError.message
+                : 'Không gọi được translation service.',
+            timestamp: new Date().toISOString(),
+          });
+        }
+      };
+
+      const timeSinceLast = Date.now() - lastTranslateTimeRef.current;
+      if (timeSinceLast >= 1500) {
+        // Force translation if user has been speaking continuously for 1.5s
+        void doTranslate();
+      } else {
+        // Otherwise wait for a short pause
+        debounceTimerRef.current = setTimeout(doTranslate, 600);
       }
     };
 
@@ -399,46 +416,44 @@ export function TranslationPanel({
         </div>
       )}
 
-      {settings.enabled && jobLogs.length > 0 ? (
+      {settings.enabled ? (
         <div className="rounded-xl border border-violet-200 bg-white p-3">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-violet-600/80">
-            Translation logs
-          </p>
-          <div className="space-y-2">
-            {jobLogs.map((item) => (
-              <div key={`${item.transcriptId}-${item.timestamp}`} className="rounded-lg border border-slate-200 px-3 py-2">
-                <div className="mb-1 flex items-center gap-2">
-                  <Badge
-                    variant={
-                      item.status === 'done'
-                        ? 'success'
-                        : item.status === 'error'
-                          ? 'danger'
-                          : item.status === 'translating'
-                            ? 'info'
-                            : 'default'
-                    }
-                  >
-                    {item.status}
-                  </Badge>
-                  <span className="text-[10px] text-slate-400">{item.transcriptId.slice(0, 8)}</span>
-                </div>
-                {item.text ? (
-                  <p className="text-xs font-medium text-slate-700">{item.text}</p>
-                ) : null}
-                <p className="mt-1 text-xs text-slate-500">{item.message}</p>
-              </div>
-            ))}
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-600/80">
+              Realtime translated script
+            </p>
+            <Badge variant={translatedScript.length ? 'info' : 'default'}>
+              {translatedScript.length} lines
+            </Badge>
           </div>
+
+          {translatedScript.length ? (
+            <div className="max-h-[320px] space-y-3 overflow-y-auto pr-1">
+              {translatedScript.map((caption) => (
+                <div
+                  key={`${caption.transcriptId ?? caption.timestamp}-${caption.timestamp}`}
+                  className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0"
+                >
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                    {caption.speakerWallet ? <Badge variant="default">{caption.speakerWallet}</Badge> : null}
+                    <span>
+                      {caption.sourceLang ?? '?'} → {caption.targetLang ?? '?'}
+                    </span>
+                    {caption.provider ? <Badge variant="outline">{caption.provider}</Badge> : null}
+                  </div>
+                  <p className="text-sm leading-relaxed text-slate-800">
+                    {caption.translatedText}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-violet-500/60 italic">
+              Chưa có bản dịch realtime.
+            </p>
+          )}
         </div>
       ) : null}
-
-      {/* No captions placeholder */}
-      {settings.enabled && !lastCaption && !error && (
-        <p className="text-xs text-violet-500/60 italic">
-          Waiting for translated transcripts...
-        </p>
-      )}
     </div>
   );
 }

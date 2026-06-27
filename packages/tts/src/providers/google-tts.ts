@@ -5,11 +5,11 @@
  * Falls back gracefully when no API key is configured.
  */
 
-import type { TTSProvider } from '../types';
-import { buildSsml } from '../ssml';
-import { detectLanguageChunks } from '../language';
-import { normalizeEnglishText } from '../pronounce';
-import type { TTSConfig } from '../config';
+import type { TTSProvider } from '../types.js';
+import { buildSsml } from '../ssml.js';
+import { detectLanguageChunks } from '../language.js';
+import { normalizeEnglishText } from '../pronounce.js';
+import type { TTSConfig } from '../config.js';
 
 const GOOGLE_TTS_URL =
   'https://texttospeech.googleapis.com/v1/text:synthesize';

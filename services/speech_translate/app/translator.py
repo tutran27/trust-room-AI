@@ -1,4 +1,4 @@
-"""Translation service using VietAI/envit5-translation."""
+"""Translation service with Azure Translator primary and local-model fallback."""
 from __future__ import annotations
 
 import logging
@@ -7,15 +7,15 @@ import time
 from pathlib import Path
 from typing import Optional
 
-import torch
 import requests
+import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, T5Tokenizer
 
 from app.config import get_config
 
 logger = logging.getLogger(__name__)
 
-# Module-level singleton
+# Module-level singleton for local fallback
 _model: Optional[AutoModelForSeq2SeqLM] = None
 _tokenizer: Optional[AutoTokenizer] = None
 
@@ -32,15 +32,36 @@ def _download_hf_file(model_id: str, filename: str, cache_dir: str) -> str:
     target.write_bytes(response.content)
     return str(target)
 
-def load_model() -> tuple[AutoModelForSeq2SeqLM, AutoTokenizer]:
-    """Lazy-load the translation model singleton."""
+
+def using_azure() -> bool:
+    return get_config().azure_translate_enabled
+
+
+def get_translation_backend_name() -> str:
+    cfg = get_config()
+    if cfg.azure_translate_enabled:
+        return "azure-translator"
+    return cfg.translation_model
+
+
+def load_model() -> tuple[AutoModelForSeq2SeqLM, AutoTokenizer] | None:
+    """Lazy-load the local translation model singleton when Azure is unavailable."""
     global _model, _tokenizer
+    cfg = get_config()
+
+    if cfg.azure_translate_enabled:
+        logger.info("Azure Translator enabled; skipping local model preload")
+        return None
+
     if _model is not None and _tokenizer is not None:
         return _model, _tokenizer
 
-    cfg = get_config()
-    logger.info("Loading model %s on device=%s dtype=%s",
-                cfg.translation_model, cfg.resolved_translation_device, cfg.translation_dtype)
+    logger.info(
+        "Loading local fallback model %s on device=%s dtype=%s",
+        cfg.translation_model,
+        cfg.resolved_translation_device,
+        cfg.translation_dtype,
+    )
     os.makedirs(cfg.hf_cache_dir, exist_ok=True)
 
     dtype_map = {
@@ -86,9 +107,7 @@ def load_model() -> tuple[AutoModelForSeq2SeqLM, AutoTokenizer]:
                 unk_token="<unk>",
                 pad_token="<pad>",
             )
-    # Explicitly disable device_map to avoid requiring the accelerate
-    # library.  We place the model on the target device manually with
-    # ``model.to(device)`` afterwards.
+
     model = AutoModelForSeq2SeqLM.from_pretrained(
         cfg.translation_model,
         torch_dtype=torch_dtype,
@@ -100,34 +119,30 @@ def load_model() -> tuple[AutoModelForSeq2SeqLM, AutoTokenizer]:
 
     _model = model
     _tokenizer = tokenizer
-    logger.info("Model loaded successfully on device=%s", model.device)
+    logger.info("Local fallback model loaded successfully on device=%s", model.device)
     return model, tokenizer
 
 
 def unload_model() -> None:
-    """Free model from memory (for testing)."""
+    """Free local fallback model from memory (for testing)."""
     global _model, _tokenizer
     _model = None
     _tokenizer = None
 
 
 def is_model_loaded() -> bool:
+    if using_azure():
+        return True
     return _model is not None
 
 
 def _format_prefix(source_lang: str, target_lang: str) -> str:
-    """Return the input prefix for envit5 translation."""
-    # If source is auto, try to detect or default to vi
     if source_lang == "auto":
-        # Default to vi detection: we could add language detection later
         source_lang = "vi"
-
-    # envit5 uses format: {source_lang}: {text}
     return f"{source_lang}: "
 
 
 def _strip_prefix(text: str, source_lang: str, target_lang: str) -> str:
-    """Strip the output prefix like 'vi: ' or 'en: ' from translated text."""
     prefixes = [f"{target_lang}: ", f"{source_lang}: "]
     for prefix in prefixes:
         if text.startswith(prefix):
@@ -135,19 +150,65 @@ def _strip_prefix(text: str, source_lang: str, target_lang: str) -> str:
     return text.strip()
 
 
-async def translate(text: str, source_lang: str, target_lang: str) -> tuple[str, float]:
-    """Translate text from source_lang to target_lang.
+def _normalize_lang(value: str) -> str:
+    value = (value or "").strip().lower()
+    if value in {"vi", "vi-vn"}:
+        return "vi"
+    if value in {"en", "en-us", "en-gb"}:
+        return "en"
+    if value == "auto":
+        return "auto"
+    return value
 
-    Returns (translated_text, latency_ms).
-    """
-    start = time.monotonic()
 
-    model, tokenizer = load_model()
+def _translate_via_azure(text: str, source_lang: str, target_lang: str) -> str:
+    cfg = get_config()
+    endpoint = cfg.azure_translator_endpoint.rstrip("/")
+    params: dict[str, str | list[str]] = {
+      "api-version": cfg.azure_translator_api_version,
+      "to": [target_lang],
+    }
+    normalized_source = _normalize_lang(source_lang)
+    if normalized_source != "auto":
+        params["from"] = normalized_source
+
+    response = requests.post(
+        f"{endpoint}/translate",
+        params=params,
+        headers={
+            "Ocp-Apim-Subscription-Key": cfg.azure_translator_key,
+            "Ocp-Apim-Subscription-Region": cfg.azure_translator_region,
+            "Content-Type": "application/json",
+        },
+        json=[{"text": text}],
+        timeout=cfg.translate_timeout,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not payload or not isinstance(payload, list):
+        raise RuntimeError("Azure Translator returned an empty response.")
+
+    translations = payload[0].get("translations") if isinstance(payload[0], dict) else None
+    if not translations or not isinstance(translations, list):
+        raise RuntimeError("Azure Translator response did not include translations.")
+
+    translated_text = translations[0].get("text") if isinstance(translations[0], dict) else None
+    if not translated_text:
+        raise RuntimeError("Azure Translator response did not include translated text.")
+
+    return str(translated_text)
+
+
+def _translate_via_local_model(text: str, source_lang: str, target_lang: str) -> str:
+    loaded = load_model()
+    if loaded is None:
+        raise RuntimeError("Local model is unavailable while Azure Translator is disabled.")
+
+    model, tokenizer = loaded
     prefix = _format_prefix(source_lang, target_lang)
     input_text = f"{prefix}{text}"
 
     inputs = tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512)
-    # Move to same device as model
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
     with torch.no_grad():
@@ -156,12 +217,42 @@ async def translate(text: str, source_lang: str, target_lang: str) -> tuple[str,
             num_beams=1,
             do_sample=False,
             max_new_tokens=128,
+            repetition_penalty=1.2,
         )
 
     raw_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    translated = _strip_prefix(raw_output, source_lang, target_lang)
+    return _strip_prefix(raw_output, source_lang, target_lang)
 
+
+async def translate(text: str, source_lang: str, target_lang: str) -> tuple[str, float]:
+    """Translate text from source_lang to target_lang.
+
+    Returns (translated_text, latency_ms).
+    """
+    start = time.monotonic()
+    cfg = get_config()
+    normalized_source = _normalize_lang(source_lang)
+    normalized_target = _normalize_lang(target_lang)
+
+    if cfg.azure_translate_enabled:
+        translated = _translate_via_azure(text, normalized_source, normalized_target)
+        elapsed_ms = (time.monotonic() - start) * 1000
+        logger.debug(
+            "Azure translated %d chars in %.0fms: %s -> %s",
+            len(text),
+            elapsed_ms,
+            normalized_source,
+            normalized_target,
+        )
+        return translated, elapsed_ms
+
+    translated = _translate_via_local_model(text, normalized_source, normalized_target)
     elapsed_ms = (time.monotonic() - start) * 1000
-    logger.debug("Translated %d chars in %.0fms: %s -> %s", len(text), elapsed_ms, source_lang, target_lang)
-
+    logger.debug(
+        "Local translated %d chars in %.0fms: %s -> %s",
+        len(text),
+        elapsed_ms,
+        normalized_source,
+        normalized_target,
+    )
     return translated, elapsed_ms

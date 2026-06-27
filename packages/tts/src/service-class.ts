@@ -7,11 +7,11 @@
  * - Start/stop/cancel lifecycle
  */
 
-import { speak, type TTSServiceOptions } from './service';
-import type { TTSConfig } from './config';
-import type { SpeakerLabel } from './types';
-import { DEFAULT_CONFIG, loadConfig } from './config';
-import { normalizeText } from './normalize';
+import { speak, type TTSServiceOptions } from './service.js';
+import type { TTSConfig } from './config.js';
+import type { SpeakerLabel } from './types.js';
+import { DEFAULT_CONFIG, loadConfig } from './config.js';
+import { normalizeText } from './normalize.js';
 
 export type TTSMode = 'live' | 'demo';
 

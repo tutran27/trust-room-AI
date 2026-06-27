@@ -9,8 +9,8 @@
  * natural sentence boundaries (common in meeting speech).
  */
 
-import type { LangChunk, LanguageCode } from './types';
-import { detectLanguageChunks } from './language';
+import type { LangChunk, LanguageCode } from './types.js';
+import { detectLanguageChunks } from './language.js';
 
 const CHUNK_MIN_CHARS = 28;
 const CHUNK_HARD_LIMIT = 90;

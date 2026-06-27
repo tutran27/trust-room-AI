@@ -13,6 +13,8 @@ import { PrismaService } from '../database/prisma.service';
 import { analyzeMessage, getLLMClient } from '@trustroom/ai';
 import { type DealStatus, type ScamIntent } from '@trustroom/types';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ModuleRef } from '@nestjs/core';
+import { TranslationService } from '../translation/translation.service';
 
 interface ChatMessagePayload {
   dealId: string;
@@ -40,7 +42,16 @@ export class WebsocketGateway
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(NotificationsService)
     private readonly notifications: NotificationsService,
+    @Inject(ModuleRef) private readonly moduleRef: ModuleRef,
   ) {}
+
+  private get translationService(): TranslationService | null {
+    try {
+      return this.moduleRef.get(TranslationService, { strict: false });
+    } catch {
+      return null;
+    }
+  }
 
   handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
@@ -455,6 +466,12 @@ export class WebsocketGateway
         wallet,
         timestamp: new Date().toISOString(),
       });
+    }
+
+    // Warm up translation model to reduce latency
+    const translationService = this.translationService;
+    if (translationService) {
+      translationService.warmupModel().catch(err => this.logger.warn(err));
     }
 
     return { event: 'joined', data: { meetingId: data.meetingId } };

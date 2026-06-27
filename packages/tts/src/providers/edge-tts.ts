@@ -18,10 +18,10 @@ import { spawn } from 'child_process';
 import { createWriteStream, mkdtempSync, readFileSync, unlinkSync, rmdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import type { TTSProvider } from '../types';
-import { detectLanguageChunks } from '../language';
-import { normalizeEnglishText } from '../pronounce';
-import { TTSConfig } from '../config';
+import type { TTSProvider } from '../types.js';
+import { detectLanguageChunks } from '../language.js';
+import { normalizeEnglishText } from '../pronounce.js';
+import { TTSConfig } from '../config.js';
 
 /** PCM frame size (60ms at 24kHz) */
 const FRAME_SIZE = 1440;

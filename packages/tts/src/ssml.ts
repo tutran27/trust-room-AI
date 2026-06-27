@@ -8,9 +8,9 @@
  * - English pronunciation aliasing
  */
 
-import type { LangChunk } from './types';
-import { applyAliases, EN_CHARACTER_TOKENS } from './pronounce';
-import { sanitizeSsmlText } from './normalize';
+import type { LangChunk } from './types.js';
+import { applyAliases, EN_CHARACTER_TOKENS } from './pronounce.js';
+import { sanitizeSsmlText } from './normalize.js';
 
 // ─── Inline punctuation → break map ───────────────────────────────────
 

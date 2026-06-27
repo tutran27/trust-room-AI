@@ -65,7 +65,15 @@ export function useTranslationCaptions(meetingId: string | null) {
 
       setLatestCaption(caption);
       setCaptions((prev) => {
-        const next = [...prev, caption];
+        let next = [...prev];
+        if (caption.transcriptId) {
+          const idx = next.findIndex(c => c.transcriptId === caption.transcriptId);
+          if (idx !== -1) {
+            next[idx] = caption;
+            return next;
+          }
+        }
+        next = [...next, caption];
         // Keep last 50 captions
         return next.slice(-50);
       });
